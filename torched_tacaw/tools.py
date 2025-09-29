@@ -1,0 +1,58 @@
+import numpy as np
+import pathlib
+
+
+def rotmat2(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    R = np.array(((c, -s), (s, c)))
+    return R
+
+
+def ensure_valid_path_file(filename):
+    """TODO:
+    Should ensure that the path is valid
+    by creating all the necessary folders
+    """
+    foldername = '/'.join(filename.split('/')[:-1])+'/'
+    folderpath = pathlib.Path(foldername)
+
+    if not folderpath.exists():
+        print(f'creating folder {foldername}')
+        folderpath.mkdir(parents=True, exist_ok=True)
+        return 1
+    else:
+        return 0
+
+
+
+def indices_of_cutout_from_array(array_shape, cutout_shape, cutout_coordinates ):
+
+    # print('I: ', array_shape, cutout_coordinates, cutout_shape)
+
+    start   = [int(i*j) for i,j in zip(cutout_coordinates, cutout_shape) ]
+    stop    = np.array([
+        start[i] + cutout_shape[i] if start[i] + cutout_shape[i] < array_shape[i] else array_shape[i]
+        for i in range(len(array_shape))
+    ])
+
+    # print(f'XXX {start} {stop}')
+
+    return start, stop
+
+def cutout_from_array(array, start, stop):
+    slices = tuple(slice(start[i], stop[i]) for i in range(len(start)))
+
+    # Use the slices to cut out the desired portion of the array
+    cutout = array[slices]
+    return cutout
+
+def get_nth_cutout_from_array(array, cutout_shape, cutout_coordinates):
+    start, stop = indices_of_cutout_from_array(array.shape, cutout_shape, cutout_coordinates)
+    return cutout_from_array(array, start, stop)
+
+
+def debugger():
+    ensure_valid_path_file('testfolder0/testfolder1/test.txt')
+
+if __name__ == "__main__":
+    debugger()
