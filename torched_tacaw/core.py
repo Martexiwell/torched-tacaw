@@ -29,10 +29,11 @@ import pyms
 
 # from pyms.utils import structure_routines
 
-import tools
-from tools import indices_of_cutout_from_array, cutout_from_array
-import units
-import coordinates
+# internal imports
+from . import tools
+from .tools import indices_of_cutout_from_array, cutout_from_array
+from . import units
+from . import coordinates
 
 
 

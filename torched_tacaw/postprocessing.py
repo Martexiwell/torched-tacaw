@@ -27,11 +27,11 @@ import numpy as np
 # import pyms
 # from pyms.utils import structure_routines
 
-import tools
+from . import tools
 # from tools import indices_of_cutout_from_array, cutout_from_array
 
-import core as tc
-from core import Config
+from . import core as tc
+from .core import Config
 
 
 class Detector:
