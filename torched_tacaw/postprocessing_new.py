@@ -6,7 +6,7 @@ by convention units in reciprocal space are mrad
 """
 import zarr
 import numpy as np
-from filelock import Timeout, FileLock
+from filelock import FileLock
 import dask.array as da
 
 from typing import Iterable
@@ -25,9 +25,19 @@ class DetectorSet:
     ----------
     config : Config or str
         Config object or str as the config file address
-    *args :
+    *args : dict
+            detector prescriptions provided as dictionaries must
+            include at least 'type' key
 
-    **kwargs :
+    Examples
+    --------
+    DetectorSet('config.yaml',
+                dict(type='circular', center=[70,0], radius=20, label='A'),
+                dict(type='circular', center=[0,0], radius=20, label='B'),
+                dict(type='annular', center=[0,0], radius_inner=80, radius_outer=100, label='ADF'),
+                )
+
+
     """
     def __init__(self, config: Config | str, *args):
 
@@ -49,29 +59,40 @@ class DetectorSet:
         return len(self.parameters)
 
 
-    def add_detectors(self, *args):
-        """
+    def add_detectors(self, *args: Iterable[dict]):
+        """Adds detectors to this detector set.
 
         Parameters
         ----------
-        args :
-
-        Returns
-        -------
-
+        *args : Iterable[dict]
+            list of detector prescriptions provided as dictionaries must
+            include at least 'type' key and other keys depending on the type
+            valid types:
+                'circular' see get_mask_circular for details
+                'annular' see get_mask_annular for details
+                if 'label' not provided it is by default added as 'detector{L}'
+                where L is the index of the detector
         """
+        valid_types = ['circular', 'annular']
+
         for arg in args:
             if not isinstance(arg, dict):
                 raise Exception(
                     f"Can't work with arg of type {type(arg)}. "
                     "Provide all arguments as dictionaries, e.g.: "
                     "{'label': 'A', 'type':'circular', 'center': [50,50], 'radius': 10 }.")
+            if not 'type' in arg.keys():
+                raise Exception(f'A type needs to be provided. Valid types are {valid_types}.')
             if arg['type'] == 'circular':
                 mask = self.get_mask_circular(**arg)
             elif arg['type'] == 'annular':
                 mask = self.get_mask_annular(**arg)
             else:
-                raise Exception(f"mask of type '{type}' is not supported")
+                raise Exception(f"Mask of type '{type}' is not supported. Valid types are {valid_types}.")
+
+            # if label not provided, generate label
+            if not 'label' in arg.keys():
+                arg['label'] = f'detector{len(self)}'
 
             self.parameters.append(arg)
             self.masks = da.concatenate([self.masks, mask[np.newaxis,:,:]], axis=0)
@@ -154,7 +175,8 @@ class DetectorSet:
 
         return mask_inner.astype(int) * mask_outer.astype(int)
 
-    def compute(self):
+    def compute(self) -> None:
+        """defines how the integration of the signal over the detectors should be done"""
         file_zarray = self.config['storage', 'intensities_zarray']
 
         data_zarray = da.from_zarr(file_zarray)
@@ -164,3 +186,68 @@ class DetectorSet:
             self.masks,
             data_zarray,
         )
+
+    def dump_to_zarr(
+            self,
+            filename:str=None,
+            overwrite:bool=False,
+            # indices:Iterable[int]=None,
+    ) -> None:
+        """Dumps eSTEM images to a zarr file.
+
+        Parameters
+        ----------
+        filename : str, default = datafolder + 'estem.zarrgroup'
+            filename for the zarr group in which the images are stored
+            labeled by the detectors' respective labels
+        overwrite : bool, default = False
+            if True, will overwrite the zarr array if it exists
+
+        Future params
+        -------------
+        indices : Iterable[int], optional
+            Indices of detectors which will be dumped.
+            if not provided, all results will be dumped
+        """
+
+        if filename is None:
+            filename = self.config['datafolder'] + 'estem.zarrgroup'
+
+        for image, parameter_set in zip(self.estem_images, self.parameters):
+            label = parameter_set['label']
+
+            da.to_zarr(
+                image,
+                filename,
+                component=label,
+                overwrite=overwrite,
+            )
+
+        # add parameters into attrs of the zarr group
+        store = zarr.open(filename)
+        store.attrs['detectors'] = self.parameters
+
+        # update config
+        try:
+            self.config['detectors'][self.label] = self.parameters
+        except:
+            print('adding detectors to config ... ')
+            self.config.config['detectors'] = {self.label: self.parameters}
+
+        lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
+        with lock:
+            self.config.dump_to_yaml(self.config['config_file'])
+
+
+    def work(self, overwrite:bool = False) -> None:
+        """The same as detector_set.compute() followed by detector_set.dum_to_zarr(overwrite)
+
+        Parameters
+        ----------
+        overwrite : bool, default = False
+            if True, will overwrite the zarr array if it exists
+
+        """
+        self.compute()
+        self.dump_to_zarr(overwrite=overwrite)
+
