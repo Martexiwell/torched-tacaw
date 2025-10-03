@@ -256,7 +256,7 @@ class DetectorSet:
 
             self.estem_images[:, :, start_x:stop_x, start_y:stop_y] = torch.einsum(
                 'ixy,eklxy->iekl',
-                self.mask,
+                self.masks,
                 chunk[0]
             )
 
@@ -293,11 +293,11 @@ class DetectorSet:
         if filename is None:
             filename = self.config['datafolder'] + 'estem.zarrgroup'
 
-        for image, parameter_set in zip(self.estem_images, self.parameters):
-            label = parameter_set['label']
+        store = zarr.open(filename)
+
 
                 # add parameters into attrs of the zarr group
-        store = zarr.open(filename)
+
         store.attrs['detectors'] = self.parameters
 
         for image, parameter_set in zip(self.estem_images, self.parameters):
@@ -305,16 +305,16 @@ class DetectorSet:
 
             store[detector_label] = image
 
-        # update config
-        try:
-            self.config['detectors'][self.label] = self.parameters
-        except:
-            print('adding detectors to config ... ')
-            self.config.config['detectors'] = {self.label: self.parameters}
+            # update config
+            try:
+                self.config['detectors'][label] = parameter_set
+            except:
+                self.simplelog('adding detectors to config ... ')
+                self.config.config['detectors'] = {label: parameter_set}
 
-        lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
-        with lock:
-            self.config.dump_to_yaml(self.config['config_file'])
+            lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
+            with lock:
+                self.config.dump_to_yaml(self.config['config_file'])
 
 
     def work(self, overwrite:bool = False) -> None:
