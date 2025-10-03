@@ -127,6 +127,8 @@ class DetectorSet:
             if not 'label' in arg.keys():
                 arg['label'] = f'detector{len(self)}'
 
+            mask = torch.tensor(mask, device=self.device)
+
             self.parameters.append(arg)
             self.masks = torch.concatenate(
                 [self.masks, mask[np.newaxis,:,:]],
