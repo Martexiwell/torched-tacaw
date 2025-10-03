@@ -26,7 +26,7 @@ dependencies = [
     "torch>=2.3.1",
     "tqdm>=4.67.0",
     "zarr>=3.0.3",
-    "py_multislice @ git+https://github.com/HamishGBrown/py_multislice.git",
+    "pyms @ git+https://github.com/HamishGBrown/py_multislice.git",
 ]
 
 [project.urls]
