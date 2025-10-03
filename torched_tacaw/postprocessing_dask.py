@@ -11,12 +11,14 @@ import dask.array as da
 
 from typing import Iterable
 
+import warnings
 
 # local imports
 from . import tools
 from . import core as tc
 from .core import Config
 
+warnings.warn('THIS MODULE USES DASK LIBRARY AND DOES NOT SEEM TO WORK PROPERLY WITH MEMORY!')
 
 class DetectorSet:
     """Class for defining detectors and computing the detected image.
