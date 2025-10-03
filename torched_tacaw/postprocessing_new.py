@@ -82,7 +82,7 @@ class DetectorSet:
         self.parameters = list()
         self.masks = torch.empty(
             [0] + list(self.config['simulation','kspace','ROI_shape']),
-            # dtype = 'double',
+            dtype = torch.float64,
             device = self.device,
         )
 
@@ -257,7 +257,7 @@ class DetectorSet:
             self.estem_images[:, :, start_x:stop_x, start_y:stop_y] = torch.einsum(
                 'ixy,eklxy->iekl',
                 self.masks,
-                torch.tensor(chunk[0], device=self.device),
+                torch.tensor(chunk[0], device=self.device, dtype=torch.float64),
             )
 
 
