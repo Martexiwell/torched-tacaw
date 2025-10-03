@@ -257,7 +257,7 @@ class DetectorSet:
             self.estem_images[:, :, start_x:stop_x, start_y:stop_y] = torch.einsum(
                 'ixy,eklxy->iekl',
                 self.masks,
-                chunk[0]
+                torch.tensor(chunk[0], device=self.device),
             )
 
 
