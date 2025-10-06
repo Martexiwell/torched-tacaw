@@ -296,11 +296,10 @@ class DetectorSet:
         store = zarr.open(filename)
 
 
-                # add parameters into attrs of the zarr group
-
+        # add parameters into attrs of the zarr group
         store.attrs['detectors'] = self.parameters
 
-        for image, parameter_set in zip(self.estem_images, self.parameters):
+        for image, parameter_set in zip(self.estem_images.numpy(), self.parameters):
             detector_label = parameter_set['label']
 
             store[detector_label] = image
