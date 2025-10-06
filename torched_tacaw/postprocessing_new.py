@@ -63,6 +63,7 @@ class DetectorSet:
         # logging
         if logger is None:
             def simplelog(*_args, **_kwargs):
+                """does not do anything"""
                 pass
         else:
             if isinstance(logger, logging.Logger):
@@ -74,6 +75,7 @@ class DetectorSet:
                     f'logger of type {type(logger)} is not supported. Must be either logger object or bool.')
 
             def simplelog(*_args, **_kwargs):
+                """wrapper of logger.info(*_args, **_kwargs)"""
                 logger.info(*_args, **_kwargs)
 
         self.simplelog = simplelog
@@ -240,11 +242,13 @@ class DetectorSet:
                 range(nof_scan_x // chunk_size_x),
                 range(nof_scan_y // chunk_size_y)
         ):
+            self.simplelog(f'- Loading chunk [{chunk_id_x}, {chunk_id_y}] from zarr ...')
             chunk = tools.get_nth_cutout_from_array(
                 data_zarray,
                 [s0, energy_size, chunk_size_x, chunk_size_y, kx_size, ky_size],
                 [0, 0, chunk_id_x, chunk_id_y, 0, 0]
             )
+            self.simplelog(f'  Chunk loaded. proceeding with actual calculation.')
 
             start_x = chunk_id_x * chunk_size_x
             stop_x = (chunk_id_x + 1) * chunk_size_x
@@ -283,37 +287,43 @@ class DetectorSet:
         overwrite : bool, default = False
             if True, will overwrite the zarr array if it exists
 
-        Future params
-        -------------
-        indices : Iterable[int], optional
-            Indices of detectors which will be dumped.
-            if not provided, all results will be dumped
+        # Future params
+        # -------------
+        # indices : Iterable[int], optional
+        #     Indices of detectors which will be dumped.
+        #     if not provided, all results will be dumped
         """
-
         if filename is None:
             filename = self.config['datafolder'] + 'estem.zarrgroup'
 
         store = zarr.open(filename)
+        self.simplelog(f'zarr group "{filename}" opened, proceeding to save values for each detector ...')
 
 
         # add parameters into attrs of the zarr group
         store.attrs['detectors'] = self.parameters
 
         for image, parameter_set in zip(self.estem_images.numpy(), self.parameters):
+
             detector_label = parameter_set['label']
+
+            self.simplelog(f'- saving array of shape {image.shape} to {filename}[{detector_label}] ...')
 
             store[detector_label] = image
 
             # update config
-            try:
-                self.config['detectors'][label] = parameter_set
-            except:
-                self.simplelog('adding detectors to config ... ')
-                self.config.config['detectors'] = {label: parameter_set}
+            self.simplelog('  updating config ...')
 
-            lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
-            with lock:
-                self.config.dump_to_yaml(self.config['config_file'])
+            if not 'detectors' in self.config.config:
+                self.simplelog("  - adding 'detectors' key to config ...")
+                self.config.config['detectors'] = dict()
+
+            self.config['detectors'][detector_label] = parameter_set
+
+        self.simplelog(f"dumping config to {self.config['config_file']}")
+        lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
+        with lock:
+            self.config.dump_to_yaml(self.config['config_file'])
 
 
     def work(self, overwrite:bool = False) -> None:
