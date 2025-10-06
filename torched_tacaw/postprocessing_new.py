@@ -320,6 +320,8 @@ class DetectorSet:
 
             self.config['detectors'][detector_label] = parameter_set
 
+        self.config['storage']['estem_zarray'] = filename
+
         self.simplelog(f"dumping config to {self.config['config_file']}")
         lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
         with lock:
