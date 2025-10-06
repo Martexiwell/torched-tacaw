@@ -39,6 +39,32 @@ from . import coordinates
 
 
 class Config:
+    """Config keeps track of the configuration of simulation,
+    getting axes, physics and everything else right.
+
+    Parameters
+    ----------
+    hardload: bool, default=True
+        if true config is initialized only be reading the nested dictionary provided
+        without interpretation. Otherwise Config is intialized standardly.
+    **kwargs
+        other parameters, see notes for details
+
+    Notes
+    ------
+    scanning_mode: {'unitcell', 'box', 'parallelogram'}
+        sets the scanning mode used to create corresponding scannign grids
+
+        unitcell (default)
+            performs scanning within the unitcell as provided by the strucutre file
+
+        box
+            performs scanning in box given by aditional arguments:
+    scanning_shape
+        (nx, ny) as the shape of scanning grid
+
+
+    """
     yaml_file_structure = """
             CONFIG FILE STRUCTURE =================================
                 * things labeled with asterisk are calculated
@@ -136,36 +162,6 @@ class Config:
             hardload:bool=False,
             **kwargs
     ):
-        """
-
-        Parameters
-        ----------
-        hardload: bool, default=True
-            if true config is initialized only be reading the nested dictionary provided
-            without interpretation. Otherwise Config is intialized standardly.
-        **kwargs
-            other parameters, see notes for details
-
-        Notes
-        ------
-        scanning_mode: {'unitcell', 'box', 'parallelogram'}
-            sets the scanning mode used to create corresponding scannign grids
-
-            unitcell (default)
-                performs scanning within the unitcell as provided by the strucutre file
-
-            box
-                performs scanning in box given by aditional arguments:
-        scanning_shape
-            (nx, ny) as the shape of scanning grid
-
-
-
-
-
-
-
-        """
         if hardload:
             # if this is chosen, config will be just made as a load of the provided dictionary
             # with no preparatory steps
