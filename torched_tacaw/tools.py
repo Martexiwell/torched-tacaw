@@ -3,8 +3,48 @@ import pathlib
 
 
 def rotmat2(theta):
+    """Returns 2d rotational matrix
+
+        Parameters
+        ----------
+        theta : float
+            angle in radians
+
+        Returns
+        -------
+        np.ndarray
+            rotation matrix
+        """
     c, s = np.cos(theta), np.sin(theta)
     R = np.array(((c, -s), (s, c)))
+    return R
+
+def rotmat3(theta, axis:int|str=None):
+    """Returns 3d rotational matrix
+
+    Parameters
+    ----------
+    theta : float
+        angle in radians
+    axis : str or int, default='z'
+        axis of rotation
+
+    Returns
+    -------
+    np.ndarray
+        rotation matrix
+    """
+    c, s = np.cos(theta), np.sin(theta)
+    R = np.array(((c, -s, 0), (s, c, 0), (0, 0, 1)))
+    if axis == 'z' or axis == 2 or axis == None:
+        pass
+    elif axis == 'x' or axis == 0:
+        R = np.roll(R, (1, 1), (0,1))
+    elif axis == 'y' or axis == 1:
+        R = np.roll(R, (2, 2), (0,1))
+    else:
+        raise ValueError(f'invalid axis {axis} of type {type(axis)} - must be "z" or "x" or "y", or 2 or 0 or 1')
+
     return R
 
 
