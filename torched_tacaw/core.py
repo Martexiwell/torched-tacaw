@@ -1100,10 +1100,22 @@ class Calculator:
 
 
     def load_trajectory(self):
-        """loads trajectory from trajectory file into self.trajectory"""
+        """Loads trajectory from trajectory file into self.trajectory
+        as a subscriptable object returning atoms when accesed by index.
+
+        Examples
+        --------
+        self.trajectory[0] -> ase.Atoms
+        """
         trajectory_file = self.config['trajectory', 'file']
 
-        self.trajectory = Trajectory(trajectory_file)
+        if 'file_type' in self.config['trajectory']:
+            trajectory_file_type = self.config['trajectory']['file_type']
+        else:
+            trajectory_file_type = 'traj'
+
+        if trajectory_file_type in ['traj', '.traj', 'ase']: # ASE .traj file
+            self.trajectory = Trajectory(trajectory_file)
 
 
     def allocate_final_wavefunctions(self):
