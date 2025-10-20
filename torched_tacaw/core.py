@@ -34,6 +34,7 @@ from . import tools
 from .tools import indices_of_cutout_from_array, cutout_from_array
 from . import units
 from . import coordinates
+from . import io
 
 
 
@@ -192,7 +193,7 @@ class Config:
             sample = {
                 "name": kwargs.pop("sample_name"),
                 "supercell_int": kwargs.pop("sample_supercell_int"),
-                "structure_file": kwargs.pop("sample_structure_file"),
+                # "structure_file": kwargs.pop("sample_structure_file"), # TODO: make this optional
                 "temperature_K": kwargs.pop("sample_temperature_K"),
                 # "unitcell"         : kwargs.pop("sample_unitcell"),
             }
@@ -252,7 +253,11 @@ class Config:
             # ===================== #
 
             ## sample
-            atoms = ase.io.read(sample["structure_file"])
+            if "structure_file" in sample:
+                atoms = ase.io.read(sample["structure_file"])
+            else: # if structure file not provided use the first structure from trajectory
+                atoms = io.TrajctoryReader(trajectory["file"])
+                #### TODO: HERE I AM WORKING NOW THIS NEEDS TO BE FIXED
             cell = atoms.get_cell().array
             sample['unitcell'] = [float(cell[i, i]) for i in range(3)]
             del cell, atoms
@@ -275,6 +280,12 @@ class Config:
             # effective timestep between used snapshots
             trajectory['timestep_effective_fs'] = trajectory['timestep_fs'] * trajectory['chunks']['step']
 
+            # file type and file_kwargs
+            if 'trajectory_file_type' in kwargs:
+                trajectory['file_type'] = kwargs['trajectory_file_type']
+
+            if 'trajectory_file_kwargs' in kwargs:
+                trajectory['file_kwargs'] = kwargs['trajectory_file_kwargs']
 
             # beam
             # ====
@@ -290,7 +301,7 @@ class Config:
                                                      [float(cell[1,0]),float(cell[1,1])]]
                 del atoms,cell
 
-            elif beam['scanning']['mode'] == 'box':
+            elif beam['scanning']['mode'] in [ 'box', 'rectangle' ]:
                 beam['scanning']['origin'] = kwargs.pop('scanning_origin')
                 box_size = kwargs.pop('scanning_box_size', None)
                 box_end = kwargs.pop('scanning_box_end', None)
@@ -306,6 +317,7 @@ class Config:
                     raise Exception(f'Either scanning_box_size or scanning_box_end must be defined')
                 del  box_size, box_end
 
+            #TODO: elif beam['scanning']['mode'] == 'box_relative':
             elif beam['scanning']['mode'] == 'parallelogram':
                 beam['scanning']['origin'] = kwargs.pop('scanning_origin')
                 beam['scanning']['basis_vectors'] = kwargs.pop('scanning_basis_vectors')
@@ -960,6 +972,40 @@ class Config:
 
         print(message)
 
+    @staticmethod
+    def convert_config_file_for_different_machine(
+            config_file:str,
+            local_project_directory: str,
+            remote_project_directory: str,
+    ):
+        """Opens the confing_file and replaces all occurrences
+        of local_project_directory by remote_project_directory
+
+        DISCLAIMER: potentially buggy?
+
+        Parameters
+        ----------
+        config_file: str
+            configuration file to be converted
+        local_project_directory : str
+            directory string to be replaced by
+        remote_project_directory : str
+        """
+        with open(config_file) as f:
+            text: str = f.read()
+
+        text = text.replace(local_project_directory, remote_project_directory)
+
+        with open(config_file, 'w') as f:
+            f.write(text)
+
+        print(
+            f'Converted : {config_file}',
+            f'     from : {local_project_directory}',
+            f'       to : {remote_project_directory}',
+            sep='\n'
+            )
+
 
 class Calculator:
     def __init__(
@@ -1030,7 +1076,7 @@ class Calculator:
         # ----------------
         # supercell reciprocal dimensions and grids for later use
         # DONE: this section shall be replaced by corresponding getters from config
-        supercell_dims_A = np.array(self.config['sample','unitcell']) * np.array(self.config['sample','supercell_int'])
+        # supercell_dims_A = np.array(self.config['sample','unitcell']) * np.array(self.config['sample','supercell_int'])
         # realpixel_dims_A = supercell_dims_A[:2] / np.array(self.config['simulation','kspace','shape_full'])
         # invsupercell_dims_invA = 1 / realpixel_dims_A
         # reciprocal_space_grids_invA = np.array(np.meshgrid(
@@ -1101,7 +1147,9 @@ class Calculator:
 
     def load_trajectory(self):
         """Loads trajectory from trajectory file into self.trajectory
-        as a subscriptable object returning atoms when accesed by index.
+        as a subscriptable object returning atoms when accessed by index.
+
+        If file format is not provided, it will guess the file format from the file extension
 
         Examples
         --------
@@ -1112,10 +1160,21 @@ class Calculator:
         if 'file_type' in self.config['trajectory']:
             trajectory_file_type = self.config['trajectory']['file_type']
         else:
-            trajectory_file_type = 'traj'
+            # guess file_type based on the file extension
+            # trajectory_file_type = 'traj'
+            trajectory_file_type = os.path.splitext(trajectory_file)[-1]
+
+        if 'file_kwargs' in self.config['trajectory']:
+            trajectory_file_kwargs = self.config['trajectory']['kwargs']
+        else:
+            trajectory_file_kwargs = {}
+
 
         if trajectory_file_type in ['traj', '.traj', 'ase']: # ASE .traj file
             self.trajectory = Trajectory(trajectory_file)
+
+        elif trajectory_file_type in ['lammps', '.lammps']:
+            self.trajectory = io.LammpsTrajectoryReader(trajectory_file, **trajectory_file_kwargs)
 
 
     def allocate_final_wavefunctions(self):
