@@ -21,21 +21,39 @@ pip install -e torched_tacaw
 ```
 
 ## Project file structure
-
+```
 torched_tacaw/
 │
 ├── torched_tacaw/              # Main package directory (contains your code)
 │   ├── __init__.py             # Makes it a package; can import modules here
-│   ├── tacaw_core.py
-│   ├── tacaw_postprocessing.py
+│   ├── core.py
+│   ├── postprocessing.py
 │   ├── units.py
 │   ├── tools.py
+│   ├── io.py
 │   └── coordinates.py
 │
 ├── tests/                      # Optional: for your tests
 │   └── test_tacaw_core.py      # Example test file
 │
+├── examples/                   # s
+│   └── tutorial/
+│       ├── tutorial.md 
+│       └── ...
+│
 ├── pyproject.toml              # Modern Python packaging config
 ├── README.md                   # Docs
 ├── LICENSE                     # License file
 └── .gitignore                  # Ignore build, venv, etc.
+
+```
+
+## git repository
+
+remote repo hosted on https://github.com/Martexiwell/torched-tacaw
+
+### branches
+- **default branch:** main
+- **development branch:** dev
+  - other branches 
+  - 
