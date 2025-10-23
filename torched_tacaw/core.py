@@ -161,17 +161,30 @@ class Config:
     def __init__(
             self,
             hardload:bool=False,
+            logger:logging.Logger=None,
             **kwargs
     ):
+        if logger is None:
+            self.logger = tools.NullLogger()
+        elif isinstance(logger, logging.Logger):
+            self.logger = logger
+        else:
+            raise Exception(f'invalid logger object provided: {logger}')
+
         if hardload:
             # if this is chosen, config will be just made as a load of the provided dictionary
             # with no preparatory steps
+            self.logger.info('hardloading config - no initialization will be performed')
+
             self.config = kwargs
 
         else:
+            self.logger.info('initializing config')
             # =========== #
             # READ INPUTS #
             # =========== #
+            self.logger.info('reading inputs')
+
             name = kwargs.pop("name", 'TACAW')
             info = kwargs.pop("info", '')
             datafolder = kwargs.pop('datafolder')
@@ -251,20 +264,25 @@ class Config:
             # ===================== #
             # Calculated parameters #
             # ===================== #
-
-            ## sample
-            if "structure_file" in sample:
-                atoms = ase.io.read(sample["structure_file"])
-            else: # if structure file not provided use the first structure from trajectory
-                atoms = io.TrajctoryReader(trajectory["file"])
-                #### TODO: HERE I AM WORKING NOW THIS NEEDS TO BE FIXED
-            cell = atoms.get_cell().array
-            sample['unitcell'] = [float(cell[i, i]) for i in range(3)]
-            del cell, atoms
-
+            self.logger.info('calculating parameters')
 
             ## trajectory
-            nof_snapshots_in_traj = len(Trajectory(trajectory["file"]))
+            # file type and file_kwargs
+            if 'trajectory_file_type' in kwargs:
+                trajectory['file_type'] = kwargs['trajectory_file_type']
+                trajectory_file_type = trajectory['file_type']
+            else:
+                trajectory_file_type = None
+
+            if 'trajectory_file_kwargs' in kwargs:
+                trajectory['file_kwargs'] = kwargs['trajectory_file_kwargs']
+                trajectory_file_kwargs = trajectory['file_kwargs']
+            else:
+                trajectory_file_kwargs = {}
+
+            self.logger.info('  probing trajectory')
+            trajectory_reader = io.TrajctoryReader(trajectory["file"], trajectory_file_type, **trajectory_file_kwargs )
+            nof_snapshots_in_traj = len(trajectory_reader)
             trajectory['chunks']['starts'] = \
                 [start for start in range(trajectory['chunks']['skip_init'],
                                           nof_snapshots_in_traj - trajectory['chunks']['size']*trajectory['chunks']['step'],
@@ -280,12 +298,21 @@ class Config:
             # effective timestep between used snapshots
             trajectory['timestep_effective_fs'] = trajectory['timestep_fs'] * trajectory['chunks']['step']
 
-            # file type and file_kwargs
-            if 'trajectory_file_type' in kwargs:
-                trajectory['file_type'] = kwargs['trajectory_file_type']
 
-            if 'trajectory_file_kwargs' in kwargs:
-                trajectory['file_kwargs'] = kwargs['trajectory_file_kwargs']
+
+
+            ## sample
+            self.logger.info('  probing sample')
+
+            if "structure_file" in sample:
+                self.logger.info('    structure file provided')
+                atoms = ase.io.read(sample["structure_file"])
+            else: # if structure file not provided use the first structure from trajectory
+                self.logger.info('    structure file NOT provided -> using trajectory file')
+                atoms = io.TrajctoryReader(trajectory["file"])[0]
+            cell = atoms.get_cell().array
+            sample['unitcell'] = [float(cell[i, i]) for i in range(3)]
+            del cell, atoms
 
             # beam
             # ====
@@ -1155,26 +1182,40 @@ class Calculator:
         --------
         self.trajectory[0] -> ase.Atoms
         """
+        # trajectory_file = self.config['trajectory', 'file']
+        #
+        # if 'file_type' in self.config['trajectory']:
+        #     trajectory_file_type = self.config['trajectory']['file_type']
+        # else:
+        #     # guess file_type based on the file extension
+        #     # trajectory_file_type = 'traj'
+        #     trajectory_file_type = os.path.splitext(trajectory_file)[-1]
+        #
+        # if 'file_kwargs' in self.config['trajectory']:
+        #     trajectory_file_kwargs = self.config['trajectory']['kwargs']
+        # else:
+        #     trajectory_file_kwargs = {}
+        #
+        #
+        # if trajectory_file_type in ['traj', '.traj', 'ase']: # ASE .traj file
+        #     self.trajectory = Trajectory(trajectory_file)
+        #
+        # elif trajectory_file_type in ['lammps', '.lammps']:
+        #     self.trajectory = io.LammpsTrajectoryReader(trajectory_file, **trajectory_file_kwargs)
+
         trajectory_file = self.config['trajectory', 'file']
 
         if 'file_type' in self.config['trajectory']:
             trajectory_file_type = self.config['trajectory']['file_type']
         else:
-            # guess file_type based on the file extension
-            # trajectory_file_type = 'traj'
-            trajectory_file_type = os.path.splitext(trajectory_file)[-1]
+            trajectory_file_type = None
 
         if 'file_kwargs' in self.config['trajectory']:
             trajectory_file_kwargs = self.config['trajectory']['kwargs']
         else:
             trajectory_file_kwargs = {}
 
-
-        if trajectory_file_type in ['traj', '.traj', 'ase']: # ASE .traj file
-            self.trajectory = Trajectory(trajectory_file)
-
-        elif trajectory_file_type in ['lammps', '.lammps']:
-            self.trajectory = io.LammpsTrajectoryReader(trajectory_file, **trajectory_file_kwargs)
+        self.trajectory = io.TrajctoryReader(trajectory_file, trajectory_file_type, **trajectory_file_kwargs)
 
 
     def allocate_final_wavefunctions(self):

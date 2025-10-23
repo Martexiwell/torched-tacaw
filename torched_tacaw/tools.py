@@ -1,5 +1,6 @@
 import numpy as np
 import pathlib
+import logging
 
 
 def rotmat2(theta):
@@ -89,6 +90,19 @@ def cutout_from_array(array, start, stop):
 def get_nth_cutout_from_array(array, cutout_shape, cutout_coordinates):
     start, stop = indices_of_cutout_from_array(array.shape, cutout_shape, cutout_coordinates)
     return cutout_from_array(array, start, stop)
+
+
+
+def _do_nothing(self, *args, **kwargs):
+    return None
+
+
+_silent_methods = {k:_do_nothing for k,v in logging.Logger.__dict__.items() if callable(v)}
+
+# "fake" logger class that can be used as the logger object, just does nothing
+NullLogger = type("NullLogger", (logging.Logger,), _silent_methods)
+
+
 
 
 def debugger():
