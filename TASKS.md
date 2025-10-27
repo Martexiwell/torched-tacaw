@@ -1,3 +1,5 @@
+NEXT MEETING: 
+
 ## Jan 
 
 - [ ] advice and answers to everything 
@@ -29,6 +31,7 @@
 
 ## F: Martin
 
+- [ ] repair thing in lammps to merge lammpsdev into main 
 - [ ] prep for luis function - logic of 
 
 ---
