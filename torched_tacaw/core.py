@@ -210,6 +210,10 @@ class Config:
                 "temperature_K": kwargs.pop("sample_temperature_K"),
                 # "unitcell"         : kwargs.pop("sample_unitcell"),
             }
+            if "sample_structure_file" in kwargs:
+                sample["structure_file"] = kwargs.pop("sample_structure_file")
+
+
             trajectory = {
                 "file": kwargs.pop("trajectory_file"),
                 "timestep_fs": kwargs.pop("trajectory_timestep_fs"),
@@ -306,7 +310,7 @@ class Config:
 
             if "structure_file" in sample:
                 self.logger.info('    structure file provided')
-                atoms = ase.io.read(sample["structure_file"])
+                atoms = ase.io.read(trajectory["file"])
             else: # if structure file not provided use the first structure from trajectory
                 self.logger.info('    structure file NOT provided -> using trajectory file')
                 atoms = io.TrajctoryReader(trajectory["file"])[0]
@@ -322,7 +326,12 @@ class Config:
             # this part prepares the scanning based on which mode is chosen
             if beam['scanning']['mode'] == 'unitcell':
                 beam['scanning']['origin'] = [0,0]
-                atoms = ase.io.read(sample["structure_file"])
+                if "structure_file" in sample:
+                    self.logger.info('    structure file provided')
+                    atoms = ase.io.read(sample["structure_file"])
+                else:
+                    self.logger.info('    structure file NOT provided -> using trajectory file')
+                    atoms = ase.io.read(trajectory["file"])
                 cell = atoms.get_cell().array
                 beam['scanning']['basis_vectors'] = [[float(cell[0,0]),float(cell[0,1])],
                                                      [float(cell[1,0]),float(cell[1,1])]]
