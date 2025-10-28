@@ -48,22 +48,142 @@ class Config:
     hardload: bool, default=True
         if true config is initialized only be reading the nested dictionary provided
         without interpretation. Otherwise Config is intialized standardly.
+    logger: logging.Logger, optional
+        if provided, logs progress of config creation
     **kwargs
-        other parameters, see notes for details
+        other parameters, see bellow for details
 
-    Notes
-    ------
-    scanning_mode: {'unitcell', 'box', 'parallelogram'}
-        sets the scanning mode used to create corresponding scannign grids
+    MISC
+    name: str, optional
+        for user's convenience
+    info: str, optional
+        for user's convenience
+    datafolder: str
+        default directory for data storage
+    config_file: str, optional
+        filename to store config
+        by default datafolder+'config.yaml'
 
-        unitcell (default)
+    BEAM
+    beam_energy_keV: float
+        energy of the beam, in keV
+    beam_conv_ang_mrad: float
+        convergence semiangle of the beam, in mrad
+    scanning_mode: {'unitcell', 'box','box_relative', 'parallelogram'}
+        sets the scanning mode used to create corresponding scanning grids
+        - unitcell (default)
             performs scanning within the unitcell as provided by the strucutre file
-
-        box
-            performs scanning in box given by aditional arguments:
-    scanning_shape
+        - box
+            performs scanning in rectangular box given by additional arguments
+            (in cartesian Angstroms):
+            - scanning_box_origin: list[float, float]
+            - scanning_box_end   OR   scanning_box_size   -  both: list[float, float]
+        - box_relative
+            same as box but using relative coordinates of the supercell
+        - parallelogram
+            performs scanning on a grid given by two vectors
+    scanning_shape: iterable[int, int]
         (nx, ny) as the shape of scanning grid
+        use [1,1] for no scanning (e.g. for planewave calculation)
+    scanning_batch_shape: iterable[int, int]
+        shape of scanning batch computed in paralel within one calculation
+        (!) IF IT DOES NOT DIVIDE scanning_shape, can result in erroneous results!
 
+    (!) Beware of fence-post problem - when setting up scanning area, "the final
+        vertex" is not actually used as a scanning point. E.g.
+        >   scanning_mode = 'box_relative'
+        >   scanning_shape = [5,4]
+        >   scanning_box_origin = [0., 0.]
+        >   scanning_box_end = [0.5, 0.8]
+        results in scanning coordinates of this form
+            ┌──┬──┬──┬──┐ .0
+            ├──┼──┼──┼──┤ .2
+            ├──┼──┼──┼──┤ .4
+        y   └──┴──┴──┴──┘ .6
+        └─x .0 .1 .2 .3 .4
+
+    SAMPLE
+    sample_name: str, optional
+        for user's convenience
+    sample_supercell_int: list[int,int,int], default=[1,1,1]
+        if the whole cell in trajectory is multiple of unitcell, this can be useful
+    sample_temperature_K: float
+        sample temperature in K, used to calculate prefactor in TACAW
+    sample_structure_file: str, optional
+        structure file from which dimensions of unitcell are extracted,
+        if not provided, last snapshot of trajectory file is used by default.
+
+    TRAJECTORY
+    trajectory_file: str
+        (ase).traj file where trajectory is stored
+    trajectory_timestep_fs: float
+        timestep between snapshots in trajectory
+    trajectory_chunks_size: int
+        number of snapshots in one tacaw-chunk
+    trajectory_chunks_skip_init: int
+        how many snapshots in the begining of trajectory to skip, useful when dealing
+        with trajectory that thermalizes in the begining
+    trajectory_chunks_step: int, default=1
+        step between consecutive snapshots from trajectory that are actually used
+        into tacaw-chunk, deafult is 1 -- everything is used
+    trajectory_chunks_nof: int, optional
+        max number of tacaw-chunks generated from trajectory, if not provided,
+        as many as possible is used
+    trajectory_chunks_overlap: float, default=1.
+        overlap factor F, if N is len of chunk,
+        then next chunk starts at N/F after previous:
+        original            ┌─────────────1.5────(3.)─────┐
+        ├────────────────────────────┤├────────────1.0────(2.)─────┤├─────────────0.5────────────┤
+                  └─────────────3.─────────────┘
+                       └─────────────2.─────────────┘
+        corresponds to the mean "in how many different chunks does one given
+        part of a trajectory end up in"
+
+    SIMULATION - MULTISLICE
+    kspace_shape_full: list[float,float]
+        full shape of array used for multislice calculation
+    kspace_ROI_mode: str, optional, possible {'center', 'minmax_mrad'}
+        mode for selection of Region Of Interest (ROI) in kspace for saving
+        if not provided, bandwidth-limited shape is used.
+        - center
+            ROI will be central region of shape
+            - kspace_ROI_shape: list[int,int]
+        - mimax_mrad
+            enables to select arbitrary rectangular selection given by min
+            and max coordinates in mrad:
+            - kspace_ROI_min: list[float,float]
+            - kspace_ROI_max: list[float,float]
+    kspace_bandwidth_limiting: list[float,float], default=[2 / 3, 2 / 3]
+        bandwidth limiting used to eliminate artefacts from leakage of electron
+        wavefunction into it's "reciprocal space copy"
+        (due to periodic boundary conditions)
+    n_slices:
+        n# of slices for multislice
+    center_atoms_in_cell: bool, default=False
+        if True, centers the atoms within supercell after loading a snapshot
+
+    SIMULATION - TACAW
+    frequency_THz_ROI: list[float, float]
+        ROI of frequencies that are kept for storage after FFT in tacaw
+    window: str | dict
+        window settings used for time windowing before FFT in TACAW
+        supported:
+        - "hann" (default), equivalent to {"type": "hann"}
+            hann window, from scipy, sym=True
+        - {"type": "tukey", "alpha": <float>}
+            tukey window, from scipy, sym=True
+
+    SIMULATION - GENERAL
+    device: str | torch.device, default='cpu'
+        device on which calculations in torch are performed, cpu by default
+    intensities_zarray: str, optional
+        enables to change the storage path of tacaw calculation output,
+        by default datafolder+'tacaw.zarray'
+
+    MISC
+    comments: optional
+        for user's convenience, can be whatever, e.g. list of strings for nicely
+        formated text or special calculation parameters a dictionary
 
     """
     yaml_file_structure = """
@@ -164,12 +284,13 @@ class Config:
             logger:logging.Logger=None,
             **kwargs
     ):
-        if logger is None:
-            self.logger = tools.NullLogger()
-        elif isinstance(logger, logging.Logger):
-            self.logger = logger
-        else:
-            raise Exception(f'invalid logger object provided: {logger}')
+        self.logger = tools.logger_or_null(logger)
+        # if logger is None:
+        #     self.logger = tools.NullLogger()
+        # elif isinstance(logger, logging.Logger):
+        #     self.logger = logger
+        # else:
+        #     raise Exception(f'invalid logger object provided: {logger}')
 
         if hardload:
             # if this is chosen, config will be just made as a load of the provided dictionary
@@ -185,27 +306,35 @@ class Config:
             # =========== #
             self.logger.info('reading inputs')
 
-            name = kwargs.pop("name", 'TACAW')
-            info = kwargs.pop("info", '')
-            datafolder = kwargs.pop('datafolder')
-            config_file = kwargs.pop('config_file')
+            name:str = kwargs.pop("name", 'TACAW')
+            info:str = kwargs.pop("info", '')
+            datafolder:str = kwargs.pop('datafolder')
+            if not datafolder.endswith('/'): # make sure that it is a directory
+                datafolder = datafolder + '/'
+            config_file = kwargs.pop('config_file', datafolder+'config.yaml')
 
-            scanning_shape = kwargs.pop('scanning_shape')
+            scanning_shape = list(kwargs.pop('scanning_shape'))
             beam = {
                 "energy_keV": kwargs.pop("beam_energy_keV"),
                 "conv_ang_mrad": kwargs.pop("beam_conv_ang_mrad"),
                 "scanning":{
                     "mode": kwargs.pop("scanning_mode", 'unitcell'),
                     "shape": scanning_shape,
-                    "batch_shape": kwargs.pop("scanning_batch_shape",scanning_shape),
+                    "batch_shape": list(kwargs.pop("scanning_batch_shape",scanning_shape)),
                 }
                 # "scanning_numbers": kwargs.pop("beam_scanning_numbers"),
                 # "scanning_batch_shape": kwargs.pop("beam_scanning_batch_shape"),
             }
+            if not (beam["scanning"]["shape"][0] % beam["scanning"]["batch_shape"][0] == 0 and
+                    beam["scanning"]["shape"][1] % beam["scanning"]["batch_shape"][1] == 0 ):
+                warnings.warn(
+                    f"scanning_batch_shape = {beam['scanning']['batch_shape']} does not divide " +
+                    f"scanning_shape = {beam['scanning']['shape']} . This can have unpredictable results."
+                )
 
             sample = {
-                "name": kwargs.pop("sample_name"),
-                "supercell_int": kwargs.pop("sample_supercell_int"),
+                "name": kwargs.pop("sample_name",'sample'),
+                "supercell_int": kwargs.pop("sample_supercell_int", [1,1,1]),
                 # "structure_file": kwargs.pop("sample_structure_file"), # TODO: make this optional
                 "temperature_K": kwargs.pop("sample_temperature_K"),
                 # "unitcell"         : kwargs.pop("sample_unitcell"),
@@ -222,7 +351,7 @@ class Config:
                     "skip_init": kwargs.pop("trajectory_chunks_skip_init"),
                     "step": kwargs.pop("trajectory_chunks_step", 1), # currently is not doing anything  =(
                     "nof": kwargs.pop("trajectory_chunks_nof", None),
-                    "overlap": kwargs.pop("trajectory_chunks_overlap", 1),
+                    "overlap": kwargs.pop("trajectory_chunks_overlap", 1.),
                 }
             }
             simulation = {
@@ -232,17 +361,17 @@ class Config:
                     "ROI_shape": kwargs.pop("kspace_ROI_shape", None),
                     "bandwidth_limiting": kwargs.pop("kspace_bandwidth_limiting", [2 / 3, 2 / 3]),
                 },
+                "n_slices": kwargs.pop("n_slices"),
                 "frequency_THz": {
                     "ROI": kwargs.pop("frequency_THz_ROI"),
                 },
+                "window": kwargs.pop("window", "hann"),
                 # "subslices" : kwargs.pop("subslices", [1.0]),
-                "n_slices": kwargs.pop("n_slices"),
-                "device": kwargs.pop("device"),
-                "window": kwargs.pop("window"),
-                "center_atoms_in_cell": kwargs.pop("center_atoms_in_cell", True),
+                "device": kwargs.pop("device", 'cpu'),
+                "center_atoms_in_cell": kwargs.pop("center_atoms_in_cell", False),
             }
             storage = {
-                "intensities_zarray": kwargs.pop("intensities_zarray"),
+                "intensities_zarray": kwargs.pop("intensities_zarray", datafolder+'tacaw.zarray'),
             }
             comments = kwargs.pop("comments", '')
 
@@ -324,6 +453,7 @@ class Config:
             # scanning
             # --------
             # this part prepares the scanning based on which mode is chosen
+            self.logger.info('setting up scanning')
             if beam['scanning']['mode'] == 'unitcell':
                 beam['scanning']['origin'] = [0,0]
                 if "structure_file" in sample:
@@ -353,7 +483,35 @@ class Config:
                     raise Exception(f'Either scanning_box_size or scanning_box_end must be defined')
                 del  box_size, box_end
 
-            #TODO: elif beam['scanning']['mode'] == 'box_relative':
+            elif beam['scanning']['mode'] == 'box_relative':
+                beam['scanning']['origin'] = kwargs.pop('scanning_origin')
+                box_size = kwargs.pop('scanning_box_size', None)
+                box_end = kwargs.pop('scanning_box_end', None)
+                if box_size is not None:
+                    beam['scanning']['basis_vectors'] = [[box_size[0],0],
+                                                         [0,box_size[1]]]
+                    beam['scanning']['box_size'] = box_size
+                elif box_end is not None:
+                    beam['scanning']['basis_vectors'] = [[box_end[0]-beam['scanning']['origin'][0], 0],
+                                                         [0, box_end[1]-beam['scanning']['origin'][1]]]
+                    beam['scanning']['box_end'] = box_end
+                else:
+                    raise Exception(f'Either scanning_box_size or scanning_box_end must be defined')
+                del  box_size, box_end
+                self.logger.debug(f'{beam=}')
+                beam['scanning']['origin'] = [
+                    r * a for r, a in zip(
+                        beam['scanning']['origin'],
+                        sample['unitcell'])
+                ]
+                beam['scanning']['basis_vectors'] = [
+                    (np.array(r) * a).tolist() for r,a in zip(
+                        beam['scanning']['basis_vectors'],
+                        sample['unitcell']
+                    )
+                ]
+
+
             elif beam['scanning']['mode'] == 'parallelogram':
                 beam['scanning']['origin'] = kwargs.pop('scanning_origin')
                 beam['scanning']['basis_vectors'] = kwargs.pop('scanning_basis_vectors')
@@ -751,10 +909,10 @@ class Config:
             yaml.dump(self.config, file, sort_keys=False, Dumper=CustomDumper)
 
     @classmethod
-    def load_from_yaml(cls, file_path):
+    def load_from_yaml(cls, file_path, logger=None):
         with open(file_path, 'r') as file:
             config = yaml.safe_load(file)
-        return cls(**config, hardload=True)
+        return cls(**config, hardload=True, logger=logger)
 
 
 
@@ -807,7 +965,7 @@ class Config:
     #     return scanning_axes_A
 
 
-    def get_scanning_grids_indises(self):
+    def get_scanning_grids_indices(self):
         """wrapper around coordinates.scanning_grids_indices() which uses scanning shape"""
         shape = self['beam','scanning','shape']
         return coordinates.scanning_grids_indices(shape)
@@ -932,6 +1090,18 @@ class Config:
 
 
     def get_frequency_axis_THz(self, ROI=False):
+        """Returns axis of frequencies in THz
+
+        Parameters
+        ----------
+        ROI : bool, default False
+            if True returns only the ROI part of full frequency axis,
+            it then corresponds directly to the results' energy axis
+
+        Returns
+        -------
+        np.ndarray
+        """
         freqs = np.fft.fftfreq(self['trajectory','chunks','size'], self['trajectory','timestep_effective_fs'] / 1e3)
         freqs = np.fft.fftshift(freqs)
 
@@ -939,6 +1109,23 @@ class Config:
             freqs = self.cropROI_arr_freq(freqs)
 
         return freqs
+
+    def get_energy_axis_meV(self, ROI=False):
+        """Returns axis of energies in meV
+
+        Parameters
+        ----------
+        ROI : bool, default False
+            if True returns only the ROI part of full energy axis,
+            it then corresponds directly to the results' energy axis
+
+        Returns
+        -------
+        np.ndarray
+        """
+        freqs = self.get_frequency_axis_THz(ROI=ROI)
+        energies = units.convert_THz2meV(freqs)
+        return energies
 
     def get_wavenumber_invA(self):
         voltage = self['beam','energy_keV'] * 1e3
@@ -949,8 +1136,7 @@ class Config:
 
 
     def crop_arr_qspace_2ROI(self, arr, from_shape:str='full'):
-        """
-        crops input array and returns array cropped to ROI in qspace according to config
+        """Crops input array and returns array cropped to ROI in qspace according to config
         crops last two axes
         """
         start = copy.copy(self['simulation', 'kspace', 'ROI_min_indices'])
@@ -983,8 +1169,7 @@ class Config:
 
 
     def cropROI_arr_freq(self, arr):
-        """
-        crops input array and returns array cropped to ROI in freq according to config
+        """Crops input array and returns array cropped to ROI in freq according to config
 
         arr: (self['chunks','size'])
         """
@@ -1044,6 +1229,45 @@ class Config:
 
 
 class Calculator:
+    """Calculator object used to perform calculation of one computation batch
+
+    Parameters
+    ----------
+    config: Config or str
+        Connfig object to be used OR configuration file to be converted as str
+    batch_id: int
+        id of batch to be computed
+    logger: logging.Logger, optional
+        used for logging
+    device: str | torch.device, optional
+        overwrites device set up by config
+        if not provided, defaults to device from config
+
+
+
+    Attributes
+    ----------
+    batch_id: int
+        id of batch to be computed
+    batch_params: dict
+        direct acces to batch-specifig config params
+    logger: looging.Logger | tools.NullLogger
+    zarr_store: zarr.Store
+    zarr_array: zarr.Array
+
+    Methods
+    -------
+    run()
+        Perform calculation for give batch
+
+    Examples
+    --------
+    import torched_tacaw as tt
+
+    config = './config.yaml'
+    calculator = tt.Calculator(config, 0)
+
+    """
     def __init__(
             self,
             config,
@@ -1051,13 +1275,15 @@ class Calculator:
             logger=None,
             device=None,
     ):
+        self.logger = tools.logger_or_null(logger)
+
         if isinstance(config, Config):
             self.config = config
         else:
-            self.config = Config.load_from_yaml(config)
+            self.config = Config.load_from_yaml(config, logger=logger)
+
         self.batch_id  = batch_id
-        self.batch_params       = self.config['computation_batches','param_list',self.batch_id]
-        self.logger             = logger
+        self.batch_params = self.config['computation_batches','param_list',self.batch_id]
 
         self.zarr_store = LocalStore(self.config['storage']['intensities_zarray'])
         self.zarr_array = zarr.open(
@@ -1078,7 +1304,8 @@ class Calculator:
         self.simplelog(f'calculator will compute batch {self.batch_id:03}: {self.config["computation_batches","param_list",self.batch_id]}')
 
 
-    def work(self):
+    def work(self) -> None:
+        """Perform calculation for give batch"""
         self.make_flat_init_wavefunctions()
         self.allocate_final_wavefunctions()
         self.load_trajectory()
@@ -1390,11 +1617,29 @@ class Calculator:
         logger = self.logger
 
         def get_window():
-            if self.config['simulation','window','name'] == 'hann':
-                window = scipy.signal.windows.tukey(self.config['trajectory','chunks','size'],1, sym=True)
-                self.simplelog('using hann window')
-            else:
-                raise Exception(f"Unknown window type: {self.config['simulation','window','name']}")
+            # TODO: move this to Config
+            window_config = self.config['simulation', 'window']
+            if isinstance(window_config, str):
+                window_config = dict(type=window_config)
+
+            if isinstance(window_config, dict): # backwards compatibility with "name" instead of type
+                if 'name' in window_config:
+                    window_config['type'] = window_config['name']
+
+            match window_config['type']:
+                case 'hann':
+                    window = scipy.signal.windows.tukey(self.config['trajectory','chunks','size'],1, sym=True)
+                    self.logger.info('using hann window')
+                case 'tukey':
+                    try:
+                        alpha = window_config['alpha']
+                    except KeyError:
+                        raise Exception('parameter alpha is missing for tukey window')
+                    window = scipy.signal.windows.tukey(self.config['trajectory', 'chunks', 'size'], alpha, sym=True)
+                    self.logger.info(f'using tukey window with alpha={alpha}')
+                case _:
+                    raise Exception(f"Unknown window type: {window_config['type']}")
+
             return window
 
         if logger is not None:
@@ -1459,6 +1704,7 @@ class Calculator:
         # prefactor = betaE / (1 - torch.exp(-betaE))
         def calculate_prefactor(x):
             # Use a small threshold to check for values close to zero
+            # if not problem with divergence around zero
             eps = 1e-6
             near_zero = torch.abs(x) < eps
             regular = x / (1 - torch.exp(-x))

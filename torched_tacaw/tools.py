@@ -93,14 +93,31 @@ def get_nth_cutout_from_array(array, cutout_shape, cutout_coordinates):
 
 
 
+# Logging handler
+# ===============
 def _do_nothing(self, *args, **kwargs):
     return None
-
 
 _silent_methods = {k:_do_nothing for k,v in logging.Logger.__dict__.items() if callable(v)}
 
 # "fake" logger class that can be used as the logger object, just does nothing
 NullLogger = type("NullLogger", (logging.Logger,), _silent_methods)
+
+def logger_or_null(logger) -> logging.Logger | NullLogger:
+    """Returns logger or NullLogger if input is None, raises ValueError if input is invalid
+
+    Parameters
+    ----------
+    logger : logging.Logger | None
+
+    """
+    if logger is None:
+        return NullLogger()
+    elif isinstance(logger, logging.Logger):
+        return logger
+    else:
+        raise Exception(f'invalid logger object provided: {logger}')
+
 
 
 
