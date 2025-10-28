@@ -76,12 +76,15 @@ class Config:
         - box
             performs scanning in rectangular box given by additional arguments
             (in cartesian Angstroms):
-            - scanning_box_origin: list[float, float]
+            - scanning_origin: list[float, float]
             - scanning_box_end   OR   scanning_box_size   -  both: list[float, float]
         - box_relative
             same as box but using relative coordinates of the supercell
         - parallelogram
-            performs scanning on a grid given by two vectors
+            performs scanning on a grid given by two vectors and origin
+            - scanning_basis_vectors: list[list[float, float], list[float, float]]
+                vectors provided as list of two basis vectors as lists
+            - scanning_origin
     scanning_shape: iterable[int, int]
         (nx, ny) as the shape of scanning grid
         use [1,1] for no scanning (e.g. for planewave calculation)
@@ -93,7 +96,7 @@ class Config:
         vertex" is not actually used as a scanning point. E.g.
         >   scanning_mode = 'box_relative'
         >   scanning_shape = [5,4]
-        >   scanning_box_origin = [0., 0.]
+        >   scanning_origin = [0., 0.]
         >   scanning_box_end = [0.5, 0.8]
         results in scanning coordinates of this form
             ┌──┬──┬──┬──┐ .0
@@ -671,220 +674,220 @@ class Config:
                 #     f"Key '{key}' not found."
         return current
 
-    @classmethod
-    def from_params(cls, **kwargs):
-        """
-        The parameters for this functions should be passed as keyword arguments
-        This function creates yaml file that should be formatted as shown below:
-
-        INPUT: =============================================
-            name                    : str
-            datafolder              : str
-            config_file             : str
-
-            beam_energy_keV         : float
-            beam_conv_ang_mrad      : float
-            beam_scanning_numbers   : list [nx:int ny:int]          # [n_x, n_y] - will generate square grid...
-            beam_scanning_batch_shape : list[int,int]                       # nof wavefunctions in batch
-
-            sample_name             : str
-            sample_supercell_int    : list[int, int, int]           # The miller-index-like multipliers of unitcell
-            sample_structure_file   : str
-            # sample_unitcell         : list[float, float, float]   # a,b,c params of orthogonal lattice
-
-            trajectory_file
-            trajectory_timestep_fs
-            trajectory_chunks_size
-            trajectory_chunks_skip_init
-            trajectory_chunks_nof
-            trajectory_chunks_overlap
-
-            kspace_shape_full
-            kspace_bandwidth_limiting
-            kspace_ROI_mode
-            kspace_ROI_shape        # shape of
-            frequency_THz_ROI       # list[float, float]
-            subslices               : list[float,]      # optional, ends with 1.0
-            n_slices                : int               # number of slices for multislice
-
-            window                  : dict{'name':'tukey','args':...}
-            device                  : str = 'cpu' | 'gpu' / 'cuda'
-            intensities_zarray
-        """
-
-        return cls(**kwargs)
-
-        # first read all params from kwargs
-
-        # name = kwargs.pop("name", 'TACAW')
-        #
-        # beam = {
-        #     "energy_keV": kwargs.pop("beam_energy_keV"),
-        #     "conv_ang_mrad": kwargs.pop("beam_conv_ang_mrad"),
-        #     "scanning_numbers": kwargs.pop("beam_scanning_numbers"),
-        #     "scanning_batch_shape": kwargs.pop("beam_scanning_batch_shape"),
-        # }
-        # sample = {
-        #     "name": kwargs.pop("sample_name"),
-        #     "supercell_int": kwargs.pop("sample_supercell_int"),
-        #     "structure_file": kwargs.pop("sample_structure_file"),
-        #     "temperature_K": kwargs.pop("sample_temperature_K"),
-        #     # "unitcell"         : kwargs.pop("sample_unitcell"),
-        # }
-        # trajectory = {
-        #     "file": kwargs.pop("trajectory_file"),
-        #     "timestep_fs": kwargs.pop("trajectory_timestep_fs"),
-        #     "chunks": {
-        #         "size": kwargs.pop("trajectory_chunks_size"),
-        #         "skip_init": kwargs.pop("trajectory_chunks_skip_init"),
-        #         "nof": kwargs.pop("trajectory_chunks_nof", None),
-        #         "overlap": kwargs.pop("trajectory_chunks_overlap", 1),
-        #     }
-        # }
-        # simulation = {
-        #     "kspace": {
-        #         "shape_full": kwargs.pop("kspace_shape_full"),
-        #         "ROI_mode": kwargs.pop("kspace_ROI_mode", None),
-        #         "ROI_shape": kwargs.pop("kspace_ROI_shape", None),
-        #         "bandwidth_limiting": kwargs.pop("kspace_bandwidth_limiting", [2 / 3, 2 / 3]),
-        #     },
-        #     "frequency_THz": {
-        #         "ROI": kwargs.pop("frequency_THz_ROI"),
-        #     },
-        #     # "subslices" : kwargs.pop("subslices", [1.0]),
-        #     "n_slices": kwargs.pop("n_slices"),
-        #     "device": kwargs.pop("device"),
-        #     "window": kwargs.pop("window"),
-        #     "center_atoms_in_cell": kwargs.pop("center_atoms_in_cell", True),
-        # }
-        # storage = {
-        #     "intensities_zarray": kwargs.pop("intensities_zarray"),
-        # }
-        # comments = kwargs.pop("comments", '')
-        #
-        # # Calculated parameters
-        #
-        # ## beam
-        #
-        # ## sample
-        # atoms = ase.io.read(sample["structure_file"])
-        # cell = atoms.get_cell().array
-        # sample['unitcell'] = [float(cell[i, i]) for i in range(3)]
-        # del cell, atoms
-        #
-        # ## trajectory
-        # nof_snapshots = len(Trajectory(trajectory["file"]))
-        # trajectory['chunks']['starts'] = \
-        #     [start for start in range(trajectory['chunks']['skip_init'],
-        #                               nof_snapshots - trajectory['chunks']['size'],
-        #                               int(trajectory['chunks']['size'] / trajectory['chunks']['overlap'])
-        #                               )
-        #      ]
-        # if trajectory['chunks']['nof'] is None:
-        #     trajectory['chunks']['nof'] = len(trajectory['chunks']['starts'])
-        # else:
-        #     trajectory['chunks']['starts'] = trajectory['chunks']['starts'][0:trajectory['chunks']['nof']]
-        # del nof_snapshots
-        #
-        # ## simulation
-        #
-        # simulation["kspace"]["shape_bandwidth_limited"] = \
-        #     np.array(
-        #         (simulation["kspace"]["shape_full"]
-        #          * np.array(simulation["kspace"]["bandwidth_limiting"])
-        #          )
-        #     ).astype(int).tolist()
-        #
-        # # kspace ROI mode
-        # if simulation["kspace"]["ROI_mode"] is None:  # No ROI
-        #     simulation["kspace"]["ROI_shape"] = simulation["kspace"]["shape_bandwidth_limited"]
-        # elif simulation["kspace"]["ROI_mode"] == 'center':
-        #     if simulation["kspace"]["ROI_shape"] is None:
-        #         simulation["kspace"]["ROI_shape"] = simulation["kspace"]["shape_bandwidth_limited"]
-        #     ROI_shape = simulation["kspace"]["ROI_shape"]
-        # elif simulation["kspace"]["ROI_mode"] == 'minmax_mrad':
-        #     simulation["kspace"]["ROI_min_mrad"] = kwargs.pop("ROI_min_mrad")
-        #     simulation["kspace"]["ROI_max_mrad"] = kwargs.pop("ROI_max_mrad")
-        #
-        #     # invdim_invA = self.get_invsupercell_dims_mrad()
-        #
-        #     simulation["kspace"]["ROI_min_indices"]
-        #     simulation["kspace"]["ROI_max_indices"]
-        #
-        # simulation['frequency_THz']['full'] = (np.array([-1, 1]) / 2 / trajectory['timestep_fs'] * 1e3).tolist()
-        #
-        # frequencies = np.linspace(*simulation['frequency_THz']['full'], trajectory['chunks']['size'])
-        #
-        # indices = np.where(
-        #     (frequencies >= simulation['frequency_THz']['ROI'][0]) & (
-        #                 frequencies <= simulation['frequency_THz']['ROI'][1])
-        # )[0].tolist()
-        #
-        # simulation['frequency_THz']['ROI_len'] = len(indices)
-        # simulation['frequency_THz']['ROI_indices'] = [indices[0], indices[-1] + 1]
-        #
-        # ## Prepare computation batches
-        #
-        # ### scanning:
-        # scanning_axis_x_A, scanning_axis_y_A = cls.scanning_axes_A(
-        #     beam['scanning_numbers'],
-        #     sample['unitcell']
-        # )
-        # simulation['scan_grid'] = {
-        #     'xaxis_A': scanning_axis_x_A.tolist(),
-        #     'yaxis_A': scanning_axis_y_A.tolist(),
-        #     'nof_points': len(scanning_axis_x_A) * len(scanning_axis_y_A)
-        # }
-        #
-        # ### make batches
-        # def make_batches():
-        #     param_list = list()
-        #     status_list = list()
-        #
-        #     scanning_batches_max_indices = np.ceil( np.array(beam['scanning_numbers']) / np.array(beam["scanning_batch_shape"]) ).astype(int)
-        #     iterator = itertools.product(
-        #         range(trajectory['chunks']['nof']),
-        #         range(scanning_batches_max_indices[0]),
-        #         range(scanning_batches_max_indices[1]),
-        #     )
-        #     for params in iterator:
-        #         param_list.append({
-        #             "trajectory_chunk_id": params[0],
-        #             "scanning_batch_coordinates": [params[1], params[2]]
-        #         })
-        #
-        #         status_list.append(0)
-        #
-        #     return param_list, status_list
-        #
-        # ### collect batches
-        #
-        # param_list, status_list = make_batches()
-        #
-        # computation_batches = {
-        #     'nof': len(param_list),
-        #     'param_list': param_list,
-        #     'status_list': status_list
-        # }
-        #
-        # # Collect everything
-        #
-        # config = {
-        #     'datafolder': kwargs.pop('datafolder'),
-        #     'config_file': kwargs.pop('config_file'),
-        #     'beam': beam,
-        #     'sample': sample,
-        #     'trajectory': trajectory,
-        #     'simulation': simulation,
-        #     'storage': storage,
-        #     'comments': comments,
-        #     'computation_batches': computation_batches
-        # }
-
-        # return cls(**config)
-
-        # with open(parameters['config_file'], 'w') as f:
-        #     yaml.dump(parameters, f)
+    # @classmethod
+    # def from_params(cls, **kwargs):
+    #     """
+    #     The parameters for this functions should be passed as keyword arguments
+    #     This function creates yaml file that should be formatted as shown below:
+    #
+    #     INPUT: =============================================
+    #         name                    : str
+    #         datafolder              : str
+    #         config_file             : str
+    #
+    #         beam_energy_keV         : float
+    #         beam_conv_ang_mrad      : float
+    #         beam_scanning_numbers   : list [nx:int ny:int]          # [n_x, n_y] - will generate square grid...
+    #         beam_scanning_batch_shape : list[int,int]                       # nof wavefunctions in batch
+    #
+    #         sample_name             : str
+    #         sample_supercell_int    : list[int, int, int]           # The miller-index-like multipliers of unitcell
+    #         sample_structure_file   : str
+    #         # sample_unitcell         : list[float, float, float]   # a,b,c params of orthogonal lattice
+    #
+    #         trajectory_file
+    #         trajectory_timestep_fs
+    #         trajectory_chunks_size
+    #         trajectory_chunks_skip_init
+    #         trajectory_chunks_nof
+    #         trajectory_chunks_overlap
+    #
+    #         kspace_shape_full
+    #         kspace_bandwidth_limiting
+    #         kspace_ROI_mode
+    #         kspace_ROI_shape        # shape of
+    #         frequency_THz_ROI       # list[float, float]
+    #         subslices               : list[float,]      # optional, ends with 1.0
+    #         n_slices                : int               # number of slices for multislice
+    #
+    #         window                  : dict{'name':'tukey','args':...}
+    #         device                  : str = 'cpu' | 'gpu' / 'cuda'
+    #         intensities_zarray
+    #     """
+    #
+    #     return cls(**kwargs)
+    #
+    #     # first read all params from kwargs
+    #
+    #     # name = kwargs.pop("name", 'TACAW')
+    #     #
+    #     # beam = {
+    #     #     "energy_keV": kwargs.pop("beam_energy_keV"),
+    #     #     "conv_ang_mrad": kwargs.pop("beam_conv_ang_mrad"),
+    #     #     "scanning_numbers": kwargs.pop("beam_scanning_numbers"),
+    #     #     "scanning_batch_shape": kwargs.pop("beam_scanning_batch_shape"),
+    #     # }
+    #     # sample = {
+    #     #     "name": kwargs.pop("sample_name"),
+    #     #     "supercell_int": kwargs.pop("sample_supercell_int"),
+    #     #     "structure_file": kwargs.pop("sample_structure_file"),
+    #     #     "temperature_K": kwargs.pop("sample_temperature_K"),
+    #     #     # "unitcell"         : kwargs.pop("sample_unitcell"),
+    #     # }
+    #     # trajectory = {
+    #     #     "file": kwargs.pop("trajectory_file"),
+    #     #     "timestep_fs": kwargs.pop("trajectory_timestep_fs"),
+    #     #     "chunks": {
+    #     #         "size": kwargs.pop("trajectory_chunks_size"),
+    #     #         "skip_init": kwargs.pop("trajectory_chunks_skip_init"),
+    #     #         "nof": kwargs.pop("trajectory_chunks_nof", None),
+    #     #         "overlap": kwargs.pop("trajectory_chunks_overlap", 1),
+    #     #     }
+    #     # }
+    #     # simulation = {
+    #     #     "kspace": {
+    #     #         "shape_full": kwargs.pop("kspace_shape_full"),
+    #     #         "ROI_mode": kwargs.pop("kspace_ROI_mode", None),
+    #     #         "ROI_shape": kwargs.pop("kspace_ROI_shape", None),
+    #     #         "bandwidth_limiting": kwargs.pop("kspace_bandwidth_limiting", [2 / 3, 2 / 3]),
+    #     #     },
+    #     #     "frequency_THz": {
+    #     #         "ROI": kwargs.pop("frequency_THz_ROI"),
+    #     #     },
+    #     #     # "subslices" : kwargs.pop("subslices", [1.0]),
+    #     #     "n_slices": kwargs.pop("n_slices"),
+    #     #     "device": kwargs.pop("device"),
+    #     #     "window": kwargs.pop("window"),
+    #     #     "center_atoms_in_cell": kwargs.pop("center_atoms_in_cell", True),
+    #     # }
+    #     # storage = {
+    #     #     "intensities_zarray": kwargs.pop("intensities_zarray"),
+    #     # }
+    #     # comments = kwargs.pop("comments", '')
+    #     #
+    #     # # Calculated parameters
+    #     #
+    #     # ## beam
+    #     #
+    #     # ## sample
+    #     # atoms = ase.io.read(sample["structure_file"])
+    #     # cell = atoms.get_cell().array
+    #     # sample['unitcell'] = [float(cell[i, i]) for i in range(3)]
+    #     # del cell, atoms
+    #     #
+    #     # ## trajectory
+    #     # nof_snapshots = len(Trajectory(trajectory["file"]))
+    #     # trajectory['chunks']['starts'] = \
+    #     #     [start for start in range(trajectory['chunks']['skip_init'],
+    #     #                               nof_snapshots - trajectory['chunks']['size'],
+    #     #                               int(trajectory['chunks']['size'] / trajectory['chunks']['overlap'])
+    #     #                               )
+    #     #      ]
+    #     # if trajectory['chunks']['nof'] is None:
+    #     #     trajectory['chunks']['nof'] = len(trajectory['chunks']['starts'])
+    #     # else:
+    #     #     trajectory['chunks']['starts'] = trajectory['chunks']['starts'][0:trajectory['chunks']['nof']]
+    #     # del nof_snapshots
+    #     #
+    #     # ## simulation
+    #     #
+    #     # simulation["kspace"]["shape_bandwidth_limited"] = \
+    #     #     np.array(
+    #     #         (simulation["kspace"]["shape_full"]
+    #     #          * np.array(simulation["kspace"]["bandwidth_limiting"])
+    #     #          )
+    #     #     ).astype(int).tolist()
+    #     #
+    #     # # kspace ROI mode
+    #     # if simulation["kspace"]["ROI_mode"] is None:  # No ROI
+    #     #     simulation["kspace"]["ROI_shape"] = simulation["kspace"]["shape_bandwidth_limited"]
+    #     # elif simulation["kspace"]["ROI_mode"] == 'center':
+    #     #     if simulation["kspace"]["ROI_shape"] is None:
+    #     #         simulation["kspace"]["ROI_shape"] = simulation["kspace"]["shape_bandwidth_limited"]
+    #     #     ROI_shape = simulation["kspace"]["ROI_shape"]
+    #     # elif simulation["kspace"]["ROI_mode"] == 'minmax_mrad':
+    #     #     simulation["kspace"]["ROI_min_mrad"] = kwargs.pop("ROI_min_mrad")
+    #     #     simulation["kspace"]["ROI_max_mrad"] = kwargs.pop("ROI_max_mrad")
+    #     #
+    #     #     # invdim_invA = self.get_invsupercell_dims_mrad()
+    #     #
+    #     #     simulation["kspace"]["ROI_min_indices"]
+    #     #     simulation["kspace"]["ROI_max_indices"]
+    #     #
+    #     # simulation['frequency_THz']['full'] = (np.array([-1, 1]) / 2 / trajectory['timestep_fs'] * 1e3).tolist()
+    #     #
+    #     # frequencies = np.linspace(*simulation['frequency_THz']['full'], trajectory['chunks']['size'])
+    #     #
+    #     # indices = np.where(
+    #     #     (frequencies >= simulation['frequency_THz']['ROI'][0]) & (
+    #     #                 frequencies <= simulation['frequency_THz']['ROI'][1])
+    #     # )[0].tolist()
+    #     #
+    #     # simulation['frequency_THz']['ROI_len'] = len(indices)
+    #     # simulation['frequency_THz']['ROI_indices'] = [indices[0], indices[-1] + 1]
+    #     #
+    #     # ## Prepare computation batches
+    #     #
+    #     # ### scanning:
+    #     # scanning_axis_x_A, scanning_axis_y_A = cls.scanning_axes_A(
+    #     #     beam['scanning_numbers'],
+    #     #     sample['unitcell']
+    #     # )
+    #     # simulation['scan_grid'] = {
+    #     #     'xaxis_A': scanning_axis_x_A.tolist(),
+    #     #     'yaxis_A': scanning_axis_y_A.tolist(),
+    #     #     'nof_points': len(scanning_axis_x_A) * len(scanning_axis_y_A)
+    #     # }
+    #     #
+    #     # ### make batches
+    #     # def make_batches():
+    #     #     param_list = list()
+    #     #     status_list = list()
+    #     #
+    #     #     scanning_batches_max_indices = np.ceil( np.array(beam['scanning_numbers']) / np.array(beam["scanning_batch_shape"]) ).astype(int)
+    #     #     iterator = itertools.product(
+    #     #         range(trajectory['chunks']['nof']),
+    #     #         range(scanning_batches_max_indices[0]),
+    #     #         range(scanning_batches_max_indices[1]),
+    #     #     )
+    #     #     for params in iterator:
+    #     #         param_list.append({
+    #     #             "trajectory_chunk_id": params[0],
+    #     #             "scanning_batch_coordinates": [params[1], params[2]]
+    #     #         })
+    #     #
+    #     #         status_list.append(0)
+    #     #
+    #     #     return param_list, status_list
+    #     #
+    #     # ### collect batches
+    #     #
+    #     # param_list, status_list = make_batches()
+    #     #
+    #     # computation_batches = {
+    #     #     'nof': len(param_list),
+    #     #     'param_list': param_list,
+    #     #     'status_list': status_list
+    #     # }
+    #     #
+    #     # # Collect everything
+    #     #
+    #     # config = {
+    #     #     'datafolder': kwargs.pop('datafolder'),
+    #     #     'config_file': kwargs.pop('config_file'),
+    #     #     'beam': beam,
+    #     #     'sample': sample,
+    #     #     'trajectory': trajectory,
+    #     #     'simulation': simulation,
+    #     #     'storage': storage,
+    #     #     'comments': comments,
+    #     #     'computation_batches': computation_batches
+    #     # }
+    #
+    #     # return cls(**config)
+    #
+    #     # with open(parameters['config_file'], 'w') as f:
+    #     #     yaml.dump(parameters, f)
 
 
 
