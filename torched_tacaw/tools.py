@@ -99,7 +99,6 @@ def _do_nothing(self, *args, **kwargs):
     return None
 
 _silent_methods = {k:_do_nothing for k,v in logging.Logger.__dict__.items() if callable(v)}
-
 # "fake" logger class that can be used as the logger object, just does nothing
 NullLogger = type("NullLogger", (logging.Logger,), _silent_methods)
 
@@ -108,13 +107,24 @@ def logger_or_null(logger) -> logging.Logger | NullLogger:
 
     Parameters
     ----------
-    logger : logging.Logger | None
-
+    logger : logging.Logger | str | bool | None
+        : logging.Logger
+            -> logger          # input is used as logger
+        : str
+            -> logging.getLogger(logger)
+        True
+            -> logging.getLogger(__name__)
+        None or False
+            -> NullLogger()    # no logging
     """
-    if logger is None:
+    if logger is None or logger is False:
         return NullLogger()
     elif isinstance(logger, logging.Logger):
         return logger
+    elif isinstance(logger, str):
+        return logging.getLogger(logger)
+    elif logger is True:
+        return logging.getLogger(__name__)
     else:
         raise Exception(f'invalid logger object provided: {logger}')
 

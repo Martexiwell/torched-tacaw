@@ -442,11 +442,13 @@ class Config:
 
             if "structure_file" in sample:
                 self.logger.info('    structure file provided')
-                atoms = ase.io.read(trajectory["file"])
+                # atoms = ase.io.read(trajectory["file"])
+                atoms = ase.io.read(sample["structure_file"])
             else: # if structure file not provided use the first structure from trajectory
                 self.logger.info('    structure file NOT provided -> using trajectory file')
                 atoms = io.TrajctoryReader(trajectory["file"])[0]
             cell = atoms.get_cell().array
+            self.logger.debug(f'cell: {str(cell)}')
             sample['unitcell'] = [float(cell[i, i]) for i in range(3)]
             del cell, atoms
 
@@ -950,7 +952,7 @@ class Config:
             overwrite=True  # Overwrite if the array already exists
         )
 
-        print(f'Zarr array {dtype} created with shape {shape} and chunks {chunks}')
+        self.logger.info(f'Zarr array {dtype} created with shape {shape} and chunks {chunks}')
 
 
     # DEPRECATED
@@ -1036,8 +1038,9 @@ class Config:
     # ====== supercell reciprocal dimensions and grids ====== #
 
     def get_supercell_dims_A(self):
-        return np.array(self['sample', 'unitcell']) * np.array(
-        self['sample', 'supercell_int'])
+        dims = np.array(self['sample', 'unitcell']) * np.array(
+            self['sample', 'supercell_int'])
+        return dims
 
 
     def get_realpixel_dims_A(self):
@@ -1053,7 +1056,7 @@ class Config:
         return self.get_reciprocal_supercell_dims_invA() / self.get_wavenumber_invA() * 1e3
 
     def get_reciprocal_space_axes_invA(self) -> tuple[np.ndarray, np.ndarray]:
-
+        """returns reciprocal space axes as a tuple of x, y"""
         d_x, d_y = self.get_realpixel_dims_A()
         x_axis = np.fft.fftshift(np.fft.fftfreq(
             self['simulation', 'kspace', 'shape_full', 0],
