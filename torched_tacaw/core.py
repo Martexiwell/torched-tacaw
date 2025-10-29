@@ -188,6 +188,21 @@ class Config:
         for user's convenience, can be whatever, e.g. list of strings for nicely
         formated text or special calculation parameters a dictionary
 
+    FUNCTIONAL
+    dump_to_yaml: bool, default=False
+        if True, dumps the config to yaml file automatically in the end of initialization
+        further, if following params are provided in kwargs, the file gets converted for
+        different machine afterwards
+        - local_project_directory : str
+            e.g.: /home/user/Projects/hBN
+        - remote_project_directory : str
+            e.g.: /cfs/klemming/home/u/user/projdir/user/hBN
+    trajectory_len: int, optional
+        can be used to specify trajectory length for the generation of config
+        useful when one wants to generate a config file without the trajectory_file
+        present (it must be present for the actual calculation)
+
+
     """
     yaml_file_structure = """
             CONFIG FILE STRUCTURE =================================
@@ -417,17 +432,29 @@ class Config:
                 trajectory_file_kwargs = {}
 
             self.logger.info('  probing trajectory')
-            trajectory_reader = io.TrajctoryReader(trajectory["file"], trajectory_file_type, **trajectory_file_kwargs )
-            nof_snapshots_in_traj = len(trajectory_reader)
+            try: # try to open the trajectory
+                trajectory_reader = io.TrajctoryReader(trajectory["file"], trajectory_file_type, **trajectory_file_kwargs )
+                trajectory_len = len(trajectory_reader)
+                del trajectory_reader
+            except FileNotFoundError: # if it does not exist, one can overwrite
+                # this by setting trajectory_len parameter, useful when generating
+                # config on machine without the actual trajectory file present
+                trajectory_len:int = kwargs.pop('trajectory_len', None)
+                logging.warning('trajectory file was not found...')
+                if trajectory_len is None:
+                    raise Exception(f'trajectory file {trajectory["file"]} was not found '
+                                    f'and trajectory_len was not provided')
+                logging.warning(f'... but trajectory_len={trajectory_len} was provided and used')
+
             trajectory['chunks']['starts'] = \
                 [start for start in range(trajectory['chunks']['skip_init'],
-                                          nof_snapshots_in_traj - trajectory['chunks']['size']*trajectory['chunks']['step'],
+                                          trajectory_len - trajectory['chunks']['size']*trajectory['chunks']['step'],
                                           int(trajectory['chunks']['size']*trajectory['chunks']['step'] / trajectory['chunks']['overlap'])
                                           )
                  ]
             if trajectory['chunks']['nof'] is not None:
                 trajectory['chunks']['starts'] = trajectory['chunks']['starts'][0:trajectory['chunks']['nof']]
-            del nof_snapshots_in_traj
+            del trajectory_len
 
             trajectory['chunks']['nof'] = len(trajectory['chunks']['starts'])
 
@@ -647,6 +674,21 @@ class Config:
             self.config['computation_batches'] = computation_batches
 
 
+
+        if kwargs.pop('dump_to_yaml', False) is True:
+            self.logger.info('dumping to yaml...')
+            self.dump_to_yaml()
+
+            local_project_directory = kwargs.pop('local_project_directory', None)
+            remote_project_directory = kwargs.pop('remote_project_directory', None)
+            self.logger.debug(
+                f'\n  {local_project_directory=}'
+                +f'\n  {remote_project_directory=}'
+            )
+
+            if not (local_project_directory is None or remote_project_directory is None):
+                self.logger.info('converting for remote machine...')
+                self.convert_file_for_different_machine(local_project_directory, remote_project_directory)
 
 
 
@@ -897,6 +939,16 @@ class Config:
 
 
     def dump_to_yaml(self, file_path=None):
+        """Dumps config to yaml file
+
+        Parameters
+        ----------
+        file_path :
+
+        Returns
+        -------
+
+        """
         file_path = file_path or self.config['config_file']
         tools.ensure_valid_path_file(file_path)
 
@@ -1199,6 +1251,7 @@ class Config:
 
         print(message)
 
+
     @staticmethod
     def convert_config_file_for_different_machine(
             config_file:str,
@@ -1232,6 +1285,19 @@ class Config:
             f'       to : {remote_project_directory}',
             sep='\n'
             )
+
+    def convert_file_for_different_machine(
+            self,
+            local_project_directory: str,
+            remote_project_directory: str,
+    ):
+        """Opens the confing_file and converts it for different machine,
+        see Config.convert_config_file_for_different_machine() for details"""
+        Config.convert_config_file_for_different_machine(
+            self.config['config_file'],
+            local_project_directory,
+            remote_project_directory
+        )
 
 
 class Calculator:
