@@ -328,15 +328,17 @@ class DetectorSet:
             self.config.dump_to_yaml(self.config['config_file'])
 
 
-    def work(self, overwrite:bool = False) -> None:
+    def work(self, filename:str=None, overwrite:bool = False) -> None:
         """The same as detector_set.compute() followed by detector_set.dum_to_zarr(overwrite)
 
         Parameters
         ----------
+        filename : str, optional, default estem.zarrgroup
+            filename to save the zarr group to
         overwrite : bool, default = False
             if True, will overwrite the zarr array if it exists
 
         """
         self.compute()
-        self.dump_to_zarr(overwrite=overwrite)
+        self.dump_to_zarr(filename=filename, overwrite=overwrite)
 
