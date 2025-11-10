@@ -151,6 +151,11 @@ def convert_lammps_dump_text_to_traj(
     kwargs : dict
         other parameters passed to the readers
 
+
+    Notes
+    -----
+    This function is mostly alteration of ase.io.lammpsrun.read_lammps_dump().
+
     """
 
     def _parse_pbc(tilt_items: list[str]) -> list[bool]:
