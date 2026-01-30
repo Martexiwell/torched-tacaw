@@ -34,6 +34,11 @@ class DetectorSet:
         if logger object is provided, logging will be performed in it
         if True is provided, default logger object is used as
             logger = logging.getLogger(__name__)
+    device : torch.device | str, optional
+        device to use
+    renormalize : bool, default True
+        if true, it will renormalize each chunk's images so that simple
+        sum through kx and ky dimensions of intensity is = 1
 
     Examples
     --------
@@ -51,8 +56,10 @@ class DetectorSet:
             *args,
             logger: bool | logging.Logger = None,
             device: str | torch.device = None,
+            renormalize: bool = True,
     ):
         self.device: str | torch.device | None = device
+        self.renormalize: bool = renormalize
 
         # config
         if isinstance(config, str):
@@ -250,6 +257,13 @@ class DetectorSet:
             )
             self.simplelog(f'  Chunk loaded. proceeding with actual calculation.')
 
+            # move chunk to torch -> shape=(e,x,y,kx,ky)
+            chunk = torch.tensor(chunk[0], device=self.device, dtype=torch.float64)
+
+            # renormalize
+            if self.renormalize:
+                chunk = chunk / torch.sum(chunk, dim=(-2,-1), keepdim=True)
+
             start_x = chunk_id_x * chunk_size_x
             stop_x = (chunk_id_x + 1) * chunk_size_x
             stop_x = stop_x if stop_x < nof_scan_x else nof_scan_x
@@ -261,7 +275,7 @@ class DetectorSet:
             self.estem_images[:, :, start_x:stop_x, start_y:stop_y] = torch.einsum(
                 'ixy,eklxy->iekl',
                 self.masks,
-                torch.tensor(chunk[0], device=self.device, dtype=torch.float64),
+                chunk,
             )
 
 
