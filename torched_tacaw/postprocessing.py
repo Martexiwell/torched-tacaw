@@ -262,7 +262,8 @@ class DetectorSet:
 
             # renormalize
             if self.renormalize:
-                chunk = chunk / torch.sum(chunk, dim=(-2,-1), keepdim=True)
+                chunk = chunk / torch.sum(chunk, dim=(0,-2,-1), keepdim=True)
+                self.simplelog('  renormalizing chunk')
 
             start_x = chunk_id_x * chunk_size_x
             stop_x = (chunk_id_x + 1) * chunk_size_x
