@@ -36,9 +36,11 @@ class DetectorSet:
             logger = logging.getLogger(__name__)
     device : torch.device | str, optional
         device to use
-    renormalize : bool, default True
+    renormalize : bool, default False
+        DO NOT CHANGE IF YOU DON'T KNOW WHAT YOU'RE DOING
         if true, it will renormalize each chunk's images so that simple
-        sum through kx and ky dimensions of intensity is = 1
+        sum through kx and ky dimensions of intensity is = 1 
+
 
     Examples
     --------
@@ -56,7 +58,7 @@ class DetectorSet:
             *args,
             logger: bool | logging.Logger = None,
             device: str | torch.device = None,
-            renormalize: bool = True,
+            renormalize: bool = False,
     ):
         self.device: str | torch.device | None = device
         self.renormalize: bool = renormalize
