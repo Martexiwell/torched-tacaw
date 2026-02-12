@@ -132,7 +132,7 @@ class Config:
     trajectory_chunks_nof: int, optional
         max number of tacaw-chunks generated from trajectory, if not provided,
         as many as possible is used
-    trajectory_chunks_overlap: float, default=1.
+    trajectory_chunks_overlap: float, default=2.
         overlap factor F, if N is len of chunk,
         then next chunk starts at N/F after previous:
         original            ┌─────────────1.5────(3.)─────┐
@@ -369,7 +369,7 @@ class Config:
                     "skip_init": kwargs.pop("trajectory_chunks_skip_init"),
                     "step": kwargs.pop("trajectory_chunks_step", 1), # currently is not doing anything  =(
                     "nof": kwargs.pop("trajectory_chunks_nof", None),
-                    "overlap": kwargs.pop("trajectory_chunks_overlap", 1.),
+                    "overlap": kwargs.pop("trajectory_chunks_overlap", 2.),
                 }
             }
             simulation = {
@@ -785,7 +785,7 @@ class Config:
     #     #         "size": kwargs.pop("trajectory_chunks_size"),
     #     #         "skip_init": kwargs.pop("trajectory_chunks_skip_init"),
     #     #         "nof": kwargs.pop("trajectory_chunks_nof", None),
-    #     #         "overlap": kwargs.pop("trajectory_chunks_overlap", 1),
+    #     #         "overlap": kwargs.pop("trajectory_chunks_overlap", 2),
     #     #     }
     #     # }
     #     # simulation = {
