@@ -1306,7 +1306,7 @@ class Calculator:
     Parameters
     ----------
     config: Config or str
-        Connfig object to be used OR configuration file to be converted as str
+        Config object to be used OR configuration file to be converted as str
     batch_id: int
         id of batch to be computed
     logger: logging.Logger, optional
@@ -1342,8 +1342,8 @@ class Calculator:
     """
     def __init__(
             self,
-            config,
-            batch_id,
+            config: Config | str,
+            batch_id: int,
             logger=None,
             device=None,
     ):
