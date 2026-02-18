@@ -29,7 +29,10 @@ class DetectorSet:
         Config object or str as the config file address
     *args : dict
             detector prescriptions provided as dictionaries must
-            include at least 'type' key
+            include at least 'type' key. Valid types are:
+            - 'circular' :
+            - 'annular' :
+            - 'custom' :
     logger : logging.Logger | bool, optional
         if logger object is provided, logging will be performed in it
         if True is provided, default logger object is used as
@@ -41,7 +44,6 @@ class DetectorSet:
         if true, it will renormalize each chunk's images so that simple
         sum through kx and ky dimensions of intensity is = 1 
 
-
     Examples
     --------
     DetectorSet('config.yaml',
@@ -49,6 +51,7 @@ class DetectorSet:
                 dict(type='circular', center=[0,0], radius=20, label='B'),
                 dict(type='annular', center=[0,0], radius_inner=80, radius_outer=100, label='ADF'),
                 )
+
 
 
     """
@@ -114,10 +117,11 @@ class DetectorSet:
             valid types:
                 'circular' see get_mask_circular for details
                 'annular' see get_mask_annular for details
-                if 'label' not provided it is by default added as 'detector{L}'
-                where L is the index of the detector
+                'custom' user defined mask as numpy array is provided by keyword 'mask'
+            if 'label' not provided it is by default added as 'detector{L}'
+            where L is the index of the detector
         """
-        valid_types = ['circular', 'annular']
+        valid_types = ['circular', 'annular', 'custom']
 
         for arg in args:
             if not isinstance(arg, dict):
@@ -126,13 +130,20 @@ class DetectorSet:
                     "Provide all arguments as dictionaries, e.g.: "
                     "{'label': 'A', 'type':'circular', 'center': [50,50], 'radius': 10 }.")
             if not 'type' in arg.keys():
-                raise Exception(f'A type needs to be provided. Valid types are {valid_types}.')
+                raise Exception(f'A mask type needs to be provided. Valid types are {valid_types}.')
             if arg['type'] == 'circular':
                 mask = self.get_mask_circular(**arg)
             elif arg['type'] == 'annular':
                 mask = self.get_mask_annular(**arg)
+            elif arg['type'] == 'custom':
+                try:
+                    mask = arg['mask']
+                except KeyError:
+                    raise KeyError('a mask needs to be provided as numpy array with keyword "mask" for mask type "custom"')
+                if mask.shape != self.masks.shape[1:]:
+                    raise Exception(f"Provided mask's shape {mask.shape} does not match the expected mask shape {self.masks.shape[1:]}")
             else:
-                raise Exception(f"Mask of type '{type}' is not supported. Valid types are {valid_types}.")
+                raise Exception(f"Mask of type '{arg['type']}' is not supported. Valid types are {valid_types}.")
 
             # if label not provided, generate label
             if not 'label' in arg.keys():
@@ -157,10 +168,11 @@ class DetectorSet:
 
         Parameters
         ----------
-        center : list or tuple of floats
-            center of the detector in mrad, e.g. [0,50]
-        radius :
+        radius : float
             radius of the detector in mrad, e.g. 10
+        center : list or tuple of floats,
+            center of the detector in mrad, e.g. [0,50],
+            defaults to [0,0] if not provided
         **kwargs :
             not used, here for compatibility and ease of use so that
             arbitrary dict can be used as long as it has necessary
@@ -195,12 +207,12 @@ class DetectorSet:
 
         Parameters
         ----------
-        center : list or tuple of floats, default = [0,0]
-            center of the detector in mrad, e.g. [0,50]
         radius_inner :
             inner radius of the detector in mrad, e.g. 70
         radius_outer :
             outer radius of the detector in mrad, e.g. 100
+        center : list or tuple of floats, default = [0,0]
+            center of the detector in mrad, e.g. [0,50]
         **kwargs :
             not used, here for compatibility and ease of use so that
             arbitrary dict can be used as long as it has necessary
