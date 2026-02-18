@@ -1352,7 +1352,9 @@ class Calculator:
         if isinstance(config, Config):
             self.config = config
         else:
-            self.config = Config.load_from_yaml(config, logger=logger)
+            lock = FileLock(config + '.lock', timeout=15 * 60)
+            with lock:
+                self.config = Config.load_from_yaml(config, logger=logger)
 
         self.batch_id  = batch_id
         self.batch_params = self.config['computation_batches','param_list',self.batch_id]
