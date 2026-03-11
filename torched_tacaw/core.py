@@ -1185,6 +1185,14 @@ class Config:
         energies = units.convert_THz2meV(freqs)
         return energies
 
+    def get_energy_step_meV(self):
+        """Returns the step on energy axis in meV"""
+        n = self['trajectory', 'chunks', 'size']
+        d = self['trajectory', 'timestep_effective_fs'] / 1e3
+        step_THz = 1.0 / (n*d)
+        return units.convert_THz2meV(step_THz)
+
+
     def get_wavenumber_invA(self):
         voltage = self['beam','energy_keV'] * 1e3
         lwn = 1 / c.h * (2 * c.m_e * c.e * voltage *
