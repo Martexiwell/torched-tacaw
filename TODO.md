@@ -4,7 +4,9 @@
 
 ## Important
 - [x] normalization
-- [ ] k-space ROI cutting - check if we still have the off-by-one error?
+- [ ] k-space ROI cutting - double-check if we still have the off-by-one error?
+- [ ] Add a possibility of saving the average of squares of the intensities 
+      which would allow us to directly & easily track the error of the calculation 
 
 ## Not so important
 - [ ] make versions in pyproject.toml more flexible, now they're frozen

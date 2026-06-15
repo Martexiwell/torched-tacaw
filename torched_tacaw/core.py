@@ -1903,7 +1903,7 @@ class Calculator:
             self.logger.info(f'Updated Zarr array at {self.batch_params}')
 
 
-class Master:
+class Dispatcher:
     def __init__(
             self,
             config_file,
