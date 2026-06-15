@@ -1185,6 +1185,14 @@ class Config:
         energies = units.convert_THz2meV(freqs)
         return energies
 
+    def get_energy_step_meV(self):
+        """Returns the step on energy axis in meV"""
+        n = self['trajectory', 'chunks', 'size']
+        d = self['trajectory', 'timestep_effective_fs'] / 1e3
+        step_THz = 1.0 / (n*d)
+        return units.convert_THz2meV(step_THz)
+
+
     def get_wavenumber_invA(self):
         voltage = self['beam','energy_keV'] * 1e3
         lwn = 1 / c.h * (2 * c.m_e * c.e * voltage *
@@ -1306,7 +1314,7 @@ class Calculator:
     Parameters
     ----------
     config: Config or str
-        Connfig object to be used OR configuration file to be converted as str
+        Config object to be used OR configuration file to be converted as str
     batch_id: int
         id of batch to be computed
     logger: logging.Logger, optional
@@ -1322,8 +1330,8 @@ class Calculator:
     batch_id: int
         id of batch to be computed
     batch_params: dict
-        direct acces to batch-specifig config params
-    logger: looging.Logger | tools.NullLogger
+        direct access to batch-specific config params
+    logger: logging.Logger | tools.NullLogger
     zarr_store: zarr.Store
     zarr_array: zarr.Array
 
@@ -1342,8 +1350,8 @@ class Calculator:
     """
     def __init__(
             self,
-            config,
-            batch_id,
+            config: Config | str,
+            batch_id: int,
             logger=None,
             device=None,
     ):
@@ -1352,7 +1360,9 @@ class Calculator:
         if isinstance(config, Config):
             self.config = config
         else:
-            self.config = Config.load_from_yaml(config, logger=logger)
+            lock = FileLock(config + '.lock', timeout=15 * 60)
+            with lock:
+                self.config = Config.load_from_yaml(config, logger=logger)
 
         self.batch_id  = batch_id
         self.batch_params = self.config['computation_batches','param_list',self.batch_id]
@@ -1373,7 +1383,7 @@ class Calculator:
                 self.logger.info(f'calculator initialized with default device: {self.device}')
 
 
-        self.simplelog(f'calculator will compute batch {self.batch_id:03}: {self.config["computation_batches","param_list",self.batch_id]}')
+        self.logger.info(f'calculator will compute batch {self.batch_id:03}: {self.config["computation_batches","param_list",self.batch_id]}')
 
 
     def work(self) -> None:
@@ -1385,14 +1395,15 @@ class Calculator:
         self.perform_tacaw()
         self.update_zarr_array()
 
-
     def simplelog(self, *args, **kwargs):
+        '''deprecated by tools.logger_or_null()'''
         if self.logger is not None:
             self.logger.info(*args, **kwargs)
         else:
             pass
 
     def simplelog_debug(self, *args, **kwargs):
+        '''deprecated by tools.logger_or_null()'''
         if self.logger is not None:
             self.logger.debug(*args, **kwargs)
         else:
@@ -1404,9 +1415,12 @@ class Calculator:
         # return self.config.get_scanning_grids(self.batch_params['scanning_batch_coordinates'])
         return self.config.get_scanning_grids_coordinates_cartesian(self.batch_params['scanning_batch_coordinates'])
 
-    def make_flat_init_wavefunctions(self):
+    def make_flat_init_wavefunctions(self) -> None:
+        """initializes 'flattened' array of wavefunctions in shape
+        [position, kx, ky] and stores them in self.init_waves_flat
+        """
         scanning_grids_A = self.get_scanning_grids_A()
-        self.simplelog(f'scanning_grids_A.shape: {scanning_grids_A.shape}')
+        self.logger.debug(f'scanning_grids_A.shape: {scanning_grids_A.shape}')
 
         # ----------------
         # supercell reciprocal dimensions and grids for later use
@@ -1589,7 +1603,7 @@ class Calculator:
         # --------- perform multislice for every snapshot in chunk ---------- #
 
         subslices = np.linspace(1.0 / self.config['simulation','n_slices'], 1.0, self.config['simulation','n_slices'])
-        self.simplelog_debug(f'subslices: {subslices}')
+        self.logger.debug(f'subslices: {subslices}')
 
         if logger is not None:
             logger.info('performing multislice on each snapshot in chunk...')
@@ -1601,7 +1615,7 @@ class Calculator:
 
             if center_atoms_in_cell:
                 atoms.translate(shift_vector)
-                self.simplelog_debug('│   ├─ atoms shifted to center')
+                self.logger.debug('│   ├─ atoms shifted to center')
 
             atomlist = np.concatenate(
                 [atoms.cell.scaled_positions(atoms.positions),
@@ -1660,7 +1674,7 @@ class Calculator:
             #                       (shape_tot_y - shape_ROI_y) // 2:(shape_tot_y + shape_ROI_y) // 2,
             #                      ]
 
-            self.simplelog_debug( f'│   └─ part of shape {fin_wave_temporary.shape} was cropped')
+            self.logger.debug( f'│   └─ part of shape {fin_wave_temporary.shape} was cropped')
 
             self.final_wavefunctions[0,i, :, :, :] = fin_wave_temporary
 
@@ -1831,13 +1845,13 @@ class Calculator:
             self.config['simulation','kspace','ROI_shape',1]
             ]
 
-        self.simplelog(f'batch of shape {addend.shape} to reshaped to {newshape}')
+        self.logger.info(f'batch of shape {addend.shape} is to be reshaped to {newshape}')
 
         # unflatten tacaw in scanning axes
         addend = addend.reshape(newshape)
         # divide tacaw by number of chunks for averaging
         addend = addend / self.config['trajectory','chunks', 'nof']
-        self.simplelog(f'batch of shape {addend.shape} will be dumped to the disk')
+        self.logger.info(f'batch of shape {addend.shape} will be dumped to the disk')
 
         # # DEBUG - dump addend to disk
         # debugfile = self.config['datafolder']+'debug/addend.npy'
@@ -1860,7 +1874,7 @@ class Calculator:
 
             # print(scanning_subspace_start, scanning_subspace_stop)
 
-            self.simplelog(f'part of scanning points between {scanning_subspace_start} and {scanning_subspace_stop} will be updated')
+            self.logger.info(f'part of scanning points between {scanning_subspace_start} and {scanning_subspace_stop} will be updated')
             chunk = self.zarr_array[
                 :,  # redundant
                 :,  # energy
@@ -1889,7 +1903,7 @@ class Calculator:
             self.logger.info(f'Updated Zarr array at {self.batch_params}')
 
 
-class Master:
+class Dispatcher:
     def __init__(
             self,
             config_file,

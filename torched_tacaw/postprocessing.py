@@ -29,7 +29,10 @@ class DetectorSet:
         Config object or str as the config file address
     *args : dict
             detector prescriptions provided as dictionaries must
-            include at least 'type' key
+            include at least 'type' key. Valid types are:
+            - 'circular' :
+            - 'annular' :
+            - 'custom' :
     logger : logging.Logger | bool, optional
         if logger object is provided, logging will be performed in it
         if True is provided, default logger object is used as
@@ -39,9 +42,10 @@ class DetectorSet:
     renormalize : bool, default False
         DO NOT CHANGE IF YOU DON'T KNOW WHAT YOU'RE DOING
         if true, it will renormalize each chunk's images so that simple
-        sum through kx and ky dimensions of intensity is = 1 
-
-
+        sum through kx and ky dimensions of intensity is = 1
+    log_to_config : bool, default True
+        if true, it will log to config file information about detectors
+        currently it is advised to use False when providing custom masks
     Examples
     --------
     DetectorSet('config.yaml',
@@ -51,17 +55,21 @@ class DetectorSet:
                 )
 
 
+
     """
     def __init__(
             self,
             config: Config | str,
             *args,
-            logger: bool | logging.Logger = None,
+            logger: logging.Logger | None = None,
             device: str | torch.device = None,
             renormalize: bool = False,
+            log_to_config:bool = True,
     ):
+        self.logger = tools.logger_or_null(logger)
         self.device: str | torch.device | None = device
         self.renormalize: bool = renormalize
+        self.log_to_config: bool = log_to_config
 
         # config
         if isinstance(config, str):
@@ -70,24 +78,26 @@ class DetectorSet:
             self.config: Config = config
 
         # logging
-        if logger is None:
-            def simplelog(*_args, **_kwargs):
-                """does not do anything"""
-                pass
-        else:
-            if isinstance(logger, logging.Logger):
-                pass
-            elif logger is True:
-                logger = logging.getLogger(__name__)
-            else:
-                raise Exception(
-                    f'logger of type {type(logger)} is not supported. Must be either logger object or bool.')
+        # if logger is None:
+        #     def simplelog(*_args, **_kwargs):
+        #         """does not do anything"""
+        #         pass
+        # else:
+        #     if isinstance(logger, logging.Logger):
+        #         pass
+        #     elif logger is True:
+        #         logger = logging.getLogger(__name__)
+        #     else:
+        #         raise Exception(
+        #             f'logger of type {type(logger)} is not supported. Must be either logger object or bool.')
+        #
+        #     def simplelog(*_args, **_kwargs):
+        #         """wrapper of logger.info(*_args, **_kwargs)"""
+        #         logger.info(*_args, **_kwargs)
 
-            def simplelog(*_args, **_kwargs):
-                """wrapper of logger.info(*_args, **_kwargs)"""
-                logger.info(*_args, **_kwargs)
+        # self.simplelog = simplelog
+        self.simplelog = logger.info
 
-        self.simplelog = simplelog
 
         # main part
         self.parameters = list()
@@ -114,10 +124,11 @@ class DetectorSet:
             valid types:
                 'circular' see get_mask_circular for details
                 'annular' see get_mask_annular for details
-                if 'label' not provided it is by default added as 'detector{L}'
-                where L is the index of the detector
+                'custom' user defined mask as numpy array is provided by keyword 'mask'
+            if 'label' not provided it is by default added as 'detector{L}'
+            where L is the index of the detector
         """
-        valid_types = ['circular', 'annular']
+        valid_types = ['circular', 'annular', 'custom']
 
         for arg in args:
             if not isinstance(arg, dict):
@@ -126,13 +137,15 @@ class DetectorSet:
                     "Provide all arguments as dictionaries, e.g.: "
                     "{'label': 'A', 'type':'circular', 'center': [50,50], 'radius': 10 }.")
             if not 'type' in arg.keys():
-                raise Exception(f'A type needs to be provided. Valid types are {valid_types}.')
+                raise Exception(f'A mask type needs to be provided. Valid types are {valid_types}.')
             if arg['type'] == 'circular':
                 mask = self.get_mask_circular(**arg)
             elif arg['type'] == 'annular':
                 mask = self.get_mask_annular(**arg)
+            elif arg['type'] == 'custom':
+                mask = self.get_mask_custom(**arg)
             else:
-                raise Exception(f"Mask of type '{type}' is not supported. Valid types are {valid_types}.")
+                raise Exception(f"Mask of type '{arg['type']}' is not supported. Valid types are {valid_types}.")
 
             # if label not provided, generate label
             if not 'label' in arg.keys():
@@ -157,10 +170,11 @@ class DetectorSet:
 
         Parameters
         ----------
-        center : list or tuple of floats
-            center of the detector in mrad, e.g. [0,50]
-        radius :
+        radius : float
             radius of the detector in mrad, e.g. 10
+        center : list or tuple of floats,
+            center of the detector in mrad, e.g. [0,50],
+            defaults to [0,0] if not provided
         **kwargs :
             not used, here for compatibility and ease of use so that
             arbitrary dict can be used as long as it has necessary
@@ -190,17 +204,17 @@ class DetectorSet:
             radius_outer: float,
             center: Iterable[float]=None,
             **kwargs,
-    ):
+    ) -> np.ndarray:
         """Returns a mask for annular detector as numpy array of ints
 
         Parameters
         ----------
-        center : list or tuple of floats, default = [0,0]
-            center of the detector in mrad, e.g. [0,50]
         radius_inner :
             inner radius of the detector in mrad, e.g. 70
         radius_outer :
             outer radius of the detector in mrad, e.g. 100
+        center : list or tuple of floats, default = [0,0]
+            center of the detector in mrad, e.g. [0,50]
         **kwargs :
             not used, here for compatibility and ease of use so that
             arbitrary dict can be used as long as it has necessary
@@ -208,6 +222,7 @@ class DetectorSet:
 
         Returns
         -------
+        np.ndarray
 
         """
         Kx, Ky = self.config.crop_arr_qspace_2ROI(
@@ -223,6 +238,59 @@ class DetectorSet:
         mask_inner = (Kx - center_x) ** 2 + (Ky - center_y) ** 2 >= radius_inner ** 2
 
         return mask_inner.astype(int) * mask_outer.astype(int)
+
+
+    def get_mask_custom(
+            self,
+            mask: np.ndarray | None = None,
+            numpy_file: str | None = None,
+            dtype = int,
+            **kwargs,
+    ) -> np.ndarray:
+        """Returns a mask for custom detector as numpy array of ints
+        the mask is either provided by keyword 'mask' directly by the user
+        or loaded from file provided as keyword 'numpy_file'
+
+        Parameters
+        ----------
+        mask : np.ndarray | None
+            inner radius of the detector in mrad, e.g. 70
+        numpy_file : str | None
+            file on disk where mask is stored
+            if endswith '.npy' or '.npz' -> np.load is used
+            otherwise np.loadtxt() is used
+        dtype: default int
+            dtype used for load textfile
+
+        **kwargs :
+            not used, here for compatibility and ease of use so that
+            arbitrary dict can be used as long as it has necessary
+            parameters
+
+        Returns
+        -------
+        """
+        if mask is None and numpy_file is None:
+            raise Exception("Either 'mask' as np.array or 'numpy_file' must be provided; neither was provided.")
+
+        if mask is not None and numpy_file is not None:
+            raise Exception("Either 'mask' or 'numpy_file' must be provided; both were provided.")
+
+        if mask is not None:
+            mask = mask
+
+        if numpy_file is not None:
+            if numpy_file.endswith('.npy') or numpy_file.endswith('.npz'):
+                mask = np.load(numpy_file)
+            else:
+                mask = np.loadtxt(numpy_file, dtype=dtype)
+
+        if mask.shape != self.masks.shape[1:]:
+            raise Exception(
+                f"Provided mask's shape {mask.shape} does not match the expected mask shape {self.masks.shape[1:]}")
+
+
+
 
     def compute(self) -> None:
         """integrates the intensities over detectors' areas"""
@@ -329,7 +397,7 @@ class DetectorSet:
             store[detector_label] = image
 
             # update config
-            self.simplelog('  updating config ...')
+            self.simplelog('  updating config object...')
 
             if not 'detectors' in self.config.config:
                 self.simplelog("  - adding 'detectors' key to config ...")
@@ -339,10 +407,11 @@ class DetectorSet:
 
         self.config['storage']['estem_zarray'] = filename
 
-        self.simplelog(f"dumping config to {self.config['config_file']}")
-        lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
-        with lock:
-            self.config.dump_to_yaml(self.config['config_file'])
+        if self.log_to_config:
+            self.simplelog(f"dumping config to {self.config['config_file']}")
+            lock = FileLock(self.config['config_file'] + '.lock', timeout=3 * 60)
+            with lock:
+                self.config.dump_to_yaml(self.config['config_file'])
 
 
     def work(self, filename:str=None, overwrite:bool = False) -> None:
