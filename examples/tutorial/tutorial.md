@@ -67,8 +67,9 @@ Torched tacaw can be loaded by simple
 import torched_tacaw as tt
 ```
 or sth like
+
 ```python
-from torched_tacaw import Config, Master
+from torched_tacaw import Config, Dispatcher
 from torched_tacaw import postprocessing as tp
 ```
 
@@ -123,7 +124,7 @@ The user shall interact with high level objects, namely
 - (`Calculator`) in parentheses because most of the time 
   the user actually does not use it directly. It actually 
   performs the whole calculation for one calculation chunk
-- `Master` is like a director which keeps track of 
+- `Dispatcher` is like a director which keeps track of 
   what has been calculated and is ordering a calculation
   to be done. It actually has only one `Calcuator` running 
   at any moment
