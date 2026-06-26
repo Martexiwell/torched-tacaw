@@ -690,6 +690,8 @@ class Config:
                 self.logger.info('converting for remote machine...')
                 self.convert_file_for_different_machine(local_project_directory, remote_project_directory)
 
+        else:
+            warnings.warn('dump_to_yaml was not provided or is False')
 
 
 

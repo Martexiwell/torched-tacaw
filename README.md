@@ -13,6 +13,14 @@ on torch, gpu accelerated.
 We designed `torched-TACAW` to be user-friendly, 
 resource and human-time efficient, and free-libre-open-source software (FLOSS).
 
+\texttt{Torched-TACAW} was developed to be user-friendly at all levels: 
+from the development of code, through on-boarding (installation), usage, 
+including computation configuration as well as monitoring of progress, 
+to data retrieval and postprocessing. Python was chosen as the basic 
+platform for its friendliness, wide adoption, rich package availability 
+and FLOSS nature. \texttt{Torched-TACAW} was also built to be transparent, 
+where reasonable, not trying to hide the inner workings from the user.
+
 Installation
 ===
 
