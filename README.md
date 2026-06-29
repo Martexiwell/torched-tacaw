@@ -6,6 +6,7 @@
 ┃  ╹ ┗━┛╹┗╸┗━╸╹ ╹┗━╸╺┻┛    ╹ ╹ ╹┗━╸╹ ╹┗┻┛ ┃ 
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ v1.0.0 ┛                                       
  ``` 
+ [![DOI](https://zenodo.org/badge/1061826813.svg)](https://doi.org/10.5281/zenodo.20929266)
  
 TACAW engine built around Hamish Brown's py_multislice. Running 
 on torch, gpu accelerated.
