@@ -80,4 +80,8 @@ Good to keep in mind
 How to cite?
 ===
 We are very happy you are using torched-TACAW. If you want to reference it, 
-you are most welcome to cite **preprint xxxxxx** as well as this GitHub repo. 
+you are most welcome to cite 
+
+**preprint https://arxiv.org/abs/2607.02236** 
+
+as well as this repo. 

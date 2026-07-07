@@ -12,6 +12,28 @@ version: 1.0.0
 doi: xxx
 date-released: 2026-06-25
 url: "https://github.com/Martexiwell/torched-tacaw.git"
+
+preferred-citation:
+    type: preprint
+    authors:
+    - family-names: "Osmera"
+      given-names: "Martin"
+      orcid: "https://orcid.org/0009-0002-4246-0972"
+    - family-names: "Vaz"
+      given-names: "João"
+    #   orcid: "https://orcid.org/0000-0000-0000-0000"
+    - family-names: "Zeiger"
+      given-names: "Paul M."
+      orcid: "https://orcid.org/0000-0002-7018-244X"
+    - family-names: "Rusz"
+      given-names: "Ján"
+      orcid: "https://orcid.org/0000-0002-0074-1349"
+    title: "Efficient large-scale STEM-EELS simulations with torched-TACAW"
+    doi: "10.48550/arXiv.2607.02236"
+    year: 2026
+    eprint: 2607.02236
+    achive: arXiv
+
 # preferred-citation:
 #     type: article
 #     authors:
