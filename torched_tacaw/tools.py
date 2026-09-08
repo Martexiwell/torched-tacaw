@@ -129,7 +129,46 @@ def logger_or_null(logger) -> logging.Logger | NullLogger:
         raise Exception(f'invalid logger object provided: {logger}')
 
 
+def add_shot_noise(pdf, n_counts=None, beam_current_A=None, dwell_time_s=None):
+    """
+    Add shot noise to a normalized PMF.
 
+    Parameters
+    ----------
+    pdf : np.ndarray
+        Normalized probability array (sums to 1.0)
+    n_counts : int or float, optional
+        Total number of electrons (counts) to simulate.
+    beam_current_A : float, optional
+        Beam current in Amperes.
+    dwell_time_s : float, optional
+        Per-voxel dwell time in seconds.
+
+    Returns
+    -------
+    np.ndarray
+        Noisy pdf, renormalized to sum to 1.0
+
+    Notes
+    -----
+    Provide either `n_counts` OR both `beam_current_A` and `dwell_time_s`.
+    """
+    e = 1.602176634e-19  # elementary charge, Coulombs
+
+    if n_counts is not None:
+        total_counts = n_counts
+    elif beam_current_A is not None and dwell_time_s is not None:
+        total_counts = (beam_current_A * dwell_time_s) / e
+    else:
+        raise ValueError(
+            "Provide either `n_counts` or both `beam_current_A` and `dwell_time_s`."
+        )
+
+    counts = np.random.poisson(pdf * total_counts)
+
+    total = counts.sum()
+
+    return counts / total_counts
 
 
 def debugger():

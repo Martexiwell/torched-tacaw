@@ -65,11 +65,29 @@ class DetectorSet:
             device: str | torch.device = None,
             renormalize: bool = False,
             log_to_config:bool = True,
+            shot_noise:bool = False,
+            electron_count: int = None,
+            beam_current_pA: float = None,
+            dwell_time_ms: float = None,
     ):
         self.logger = tools.logger_or_null(logger)
         self.device: str | torch.device | None = device
         self.renormalize: bool = renormalize
         self.log_to_config: bool = log_to_config
+        self.shot_noise: bool = shot_noise
+        if shot_noise:
+            e = 1.602176634e-19  # elementary charge, Coulombs
+            if electron_count is not None:
+                self.total_counts = float(electron_count)
+            elif beam_current_pA is not None and dwell_time_ms is not None:
+                self.total_counts = (beam_current_pA * 1e-12) * (dwell_time_ms * 1e-3) / e
+            else:
+                raise ValueError(
+                    "shot_noise=True requires either `electron_count` or both "
+                    "`beam_current_pA` and `dwell_time_ms` to be provided."
+                )
+        else:
+            self.total_counts = None
 
         # config
         if isinstance(config, str):
@@ -329,6 +347,10 @@ class DetectorSet:
 
             # move chunk to torch -> shape=(e,x,y,kx,ky)
             chunk = torch.tensor(chunk[0], device=self.device, dtype=torch.float64)
+
+            if self.shot_noise:
+                chunk = torch.poisson(chunk * self.total_counts) / self.total_counts
+
 
             # renormalize
             if self.renormalize:

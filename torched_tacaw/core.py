@@ -739,12 +739,12 @@ class Config:
     #         sample_structure_file   : str
     #         # sample_unitcell         : list[float, float, float]   # a,b,c params of orthogonal lattice
     #
-    #         trajectory_file
-    #         trajectory_timestep_fs
-    #         trajectory_chunks_size
-    #         trajectory_chunks_skip_init
-    #         trajectory_chunks_nof
-    #         trajectory_chunks_overlap
+    #         trajectory_file               : str
+    #         trajectory_timestep_fs        : float
+    #         trajectory_chunks_size        : int
+    #         trajectory_chunks_skip_init   : int       #
+    #         trajectory_chunks_nof         : int
+    #         trajectory_chunks_overlap     : float
     #
     #         kspace_shape_full
     #         kspace_bandwidth_limiting
@@ -1555,15 +1555,18 @@ class Calculator:
             device = self.device
         )
 
-        if self.logger is not None:
-            logger = self.logger.getChild('allocate_final_wavefunctions()')
-            logger.info(f'final wavefunctions allocated in shape {shape}')
+        # if self.logger is not None:
+        #     logger = self.logger.getChild('allocate_final_wavefunctions()')
+        #     logger.info(f'final wavefunctions allocated in shape {shape}')
+        self.logger.info(f'final wavefunctions allocated in shape {shape}')
 
 
     def perform_multislice(self):
-        logger = self.logger.getChild('multislice') if self.logger is not None else None
-        if logger is not None:
-            logger.info('preparing to perform multislice...')
+        # logger = self.logger.getChild('multislice') if self.logger is not None else None
+        # if logger is not None:
+        #     logger.info('preparing to perform multislice...')
+        self.logger.info('preparing to perform multislice...')
+
 
         # --------- Initialize crystal structure ---------- #
 
@@ -1586,8 +1589,9 @@ class Calculator:
 
         # center atoms in the cell
         if center_atoms_in_cell:
-            if logger is not None:
-                logger.info('centering atoms in cell ...')
+            # if logger is not None:
+            #     logger.info('centering atoms in cell ...')
+            self.logger.info('centering atoms in cell ...')
             base_structure_centered = base_structure.copy()
             base_structure_centered.center()
             shift_vector = (base_structure_centered.get_center_of_mass()
@@ -1605,12 +1609,11 @@ class Calculator:
         subslices = np.linspace(1.0 / self.config['simulation','n_slices'], 1.0, self.config['simulation','n_slices'])
         self.logger.debug(f'subslices: {subslices}')
 
-        if logger is not None:
-            logger.info('performing multislice on each snapshot in chunk...')
+
+        self.logger.info('performing multislice on each snapshot in chunk...')
         for i in range(self.config['trajectory', 'chunks', 'size']):
             snapshot_index = chunk_start+i*self.config['trajectory','chunks','step']
-            if logger is not None:
-                logger.info(f'├─ begining multislice of snapshot {i} ({snapshot_index} in .trj)')
+            self.logger.info(f'├─ begining multislice of snapshot {i} ({snapshot_index} in .trj)')
             atoms = self.trajectory[snapshot_index]
 
             if center_atoms_in_cell:
@@ -1644,8 +1647,7 @@ class Calculator:
                 band_width_limiting=self.config['simulation', 'kspace', 'bandwidth_limiting']
             )
 
-            if logger is not None:
-                logger.debug(f'│   ├─ ms precursor finished')
+            self.logger.debug(f'│   ├─ ms precursor finished')
 
             fin_wave_temporary = pyms.multislice(
                 self.init_waves_flat,
@@ -1659,8 +1661,7 @@ class Calculator:
             )
             fin_wave_temporary = torch.fft.fftshift(fin_wave_temporary, dim = (-2, -1))
 
-            if logger is not None:
-                logger.debug(f'│   ├─ multislice finished --> cutting kspace and reshaping...')
+            self.logger.debug(f'│   ├─ multislice finished --> cutting kspace and reshaping...')
 
             # TODO: add "crop_mode" to config in format "qe" | None
             # slice out ROI in kspace
@@ -1728,8 +1729,7 @@ class Calculator:
 
             return window
 
-        if logger is not None:
-            logger.info('performing tacaw (windowing, FFT, ROI, modsquared)...')
+        self.logger.info('performing tacaw (windowing, FFT, ROI, modsquared)...')
         # windowing
         self.final_wavefunctions = torch.einsum(
             'ae...,e->ae...',
@@ -1756,10 +1756,10 @@ class Calculator:
         self.intensity_freq = torch.abs(self.intensity_freq)**2
 
         # normalize ( sum I = trajlen * trajlen * Nx_red * Ny_red )
-        if logger is not None:
-            logger.info(f'renormalizing intensities:')
-            logger.info(f'  from sum:          {torch.sum(self.intensity_freq)}')
-            logger.info(f'  with shape:        {self.intensity_freq.shape}')
+
+        logger.info(f'renormalizing intensities:')
+        logger.info(f'  from sum:          {torch.sum(self.intensity_freq)}')
+        logger.info(f'  with shape:        {self.intensity_freq.shape}')
         self.intensity_freq = self.intensity_freq / (
                     self.config['trajectory','chunks','size'] ** 2
                     * self.config['simulation','kspace','shape_full',0]
@@ -1911,7 +1911,7 @@ class Dispatcher:
             device=None,
     ):
         self.config_file        = config_file
-        self.logger             = logger
+        self.logger             = tools.logger_or_null(logger)
 
         if device is not None:
             self.device = device
