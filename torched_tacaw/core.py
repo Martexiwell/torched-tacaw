@@ -1337,8 +1337,8 @@ class Calculator:
 
     Methods
     -------
-    run()
-        Perform calculation for give batch
+    work()
+        Perform calculation for given batch
 
     Examples
     --------
@@ -1387,7 +1387,7 @@ class Calculator:
 
 
     def work(self) -> None:
-        """Perform calculation for give batch"""
+        """Perform calculation for given batch"""
         self.make_flat_init_wavefunctions()
         self.allocate_final_wavefunctions()
         self.load_trajectory()
@@ -1904,6 +1904,65 @@ class Calculator:
 
 
 class Dispatcher:
+    """Dispatcher selects computation batches, runs them and tracks their progress
+
+    The Dispatcher is the object the user runs. It repeatedly claims a batch
+    that has not been started yet, marks it as in-progress, hands it over to a
+    Calculator, and marks it finished once the calculation is complete. It
+    stops when no unstarted batch is left.
+
+    Several Dispatcher objects can run in parallel, typically one per GPU.
+    They need no direct communication with each other: the config file is
+    file-locked while batch statuses are read and written, so no batch is ever
+    claimed twice.
+
+    Batch statuses live in config['computation_batches']['status_list'] and are
+    encoded as 0 = not started, 1 = in progress, 2 = finished.
+
+    Parameters
+    ----------
+    config_file: str
+        path to the config file (typically config.yaml) written when the
+        calculation was set up
+    logger: logging.Logger, optional
+        used for logging
+    device: str | torch.device, optional
+        overwrites device set up by config
+        currently has to be given explicitly, see Notes
+
+    Attributes
+    ----------
+    config_file: str
+        path to the config file
+    device: str | torch.device
+        device handed over to the Calculator
+    batch_id: int
+        id of the batch currently being processed, set by initialize_batch()
+    batches_left: bool
+        becomes False once no unstarted batch remains
+    logger: logging.Logger | tools.NullLogger
+
+    Methods
+    -------
+    run()
+        Process batches until none are left
+    restart_unfinished()
+        Reset batches left in progress by an interrupted run
+
+    Notes
+    -----
+    Omitting `device` currently raises AttributeError: the fallback to the
+    device stored in the config file reads self.config, which is never set.
+    Pass `device` explicitly until this is fixed.
+
+    Examples
+    --------
+    import torched_tacaw as tt
+
+    dispatcher = tt.Dispatcher('./config.yaml', device='cuda:0')
+    dispatcher.run()
+
+    """
     def __init__(
             self,
             config_file,
@@ -1925,12 +1984,24 @@ class Dispatcher:
         self.batches_left = True
 
     def simplelog(self, *args, **kwargs):
+        """Log through self.logger, or do nothing if no logger was given"""
         if self.logger is not None:
             self.logger.info(*args, **kwargs)
         else:
             pass
 
     def initialize_batch(self):
+        """Claim the next unstarted batch and mark it as in progress
+
+        Locks the config file, finds the first batch with status 0, sets its
+        status to 1 and writes the config back.
+
+        Returns
+        -------
+        bool
+            True if a batch was claimed; its id is stored in self.batch_id.
+            False if no unstarted batch was found.
+        """
         if self.logger is not None:
             self.logger.info(f'='*60)
             self.logger.info(f'Initializing new batch:')
@@ -1956,6 +2027,12 @@ class Dispatcher:
             return True  # returns True if there is unstarted batch
 
     def process_batch(self):
+        """Run the Calculator on the currently claimed batch
+
+        Instantiates a Calculator for self.batch_id with this Dispatcher's
+        logger and device and calls its work() method. Blocks until the batch
+        has been computed.
+        """
         calculator = Calculator(
             self.config_file,
             self.batch_id,
@@ -1966,6 +2043,11 @@ class Dispatcher:
         calculator.work()
 
     def finish_batch(self):
+        """Mark the currently claimed batch as finished
+
+        Locks the config file, sets the status of self.batch_id to 2 and
+        writes the config back.
+        """
         lock = FileLock(self.config_file + '.lock', timeout=15 * 60)
         with lock:
             config = Config.load_from_yaml(self.config_file)
@@ -1977,6 +2059,13 @@ class Dispatcher:
 
 
     def run(self):
+        """Process batches until none are left
+
+        Loops over initialize_batch(), process_batch() and finish_batch()
+        until no unstarted batch remains. Safe to run from several processes
+        at once: the lock on the config file makes sure each batch is claimed
+        by one Dispatcher only.
+        """
         if self.logger is not None:
             self.logger.info(f' ●   M A S T E R   S T A R T E D   ● ')
 
@@ -1993,7 +2082,15 @@ class Dispatcher:
 
 
     def restart_unfinished(self):
-        "restarts unfinished calculation"
+        """Reset batches left in progress by an interrupted run
+
+        Locks the config file and sets every batch with status 1 (in progress)
+        back to 0 (not started), so that a subsequent run() picks them up
+        again. Intended for recovering after a crash or a cancelled job.
+
+        Do not call this while other Dispatchers are still working: their
+        batches would be handed out a second time.
+        """
 
         if self.logger is not None:
             self.logger.info(f'RESTART: rewriting {self.config_file}')
