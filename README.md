@@ -71,6 +71,43 @@ named **dev-featureName**. When ready, they can be pulled
 into **dev**. **dev** can be eventually pulled into main.
 
 
+Multi-bead PIMD/TRPMD trajectories
+===
+Pass synchronized bead files to `Config` using `trajectory_files` instead of
+`trajectory_file`; all other simulation parameters stay the same:
+
+```python
+config = Config(
+    trajectory_files=["bead0.traj", "bead1.traj", "bead2.traj"],
+    # ... your existing beam, sample, trajectory and simulation parameters ...
+)
+```
+
+For each selected time frame, every bead is propagated through multislice.
+The complex exit waves are averaged over beads before applying the time window,
+temporal FFT, and modulus squared. This preserves the STEM scan-position axes:
+
+```text
+mean_bead(exit_wave) -> time window -> FFT(time) -> |...|^2 -> thermal correction
+```
+
+Bead files must have equal frame counts, synchronized time indices, identical
+atom ordering, and compatible simulation cells. The loader checks frame counts
+and compares atomic numbers/order and cells in the initial frames; the caller
+must ensure time synchronization and consistency throughout each trajectory.
+Atom counts are also checked during propagation. Runtime grows approximately
+linearly with bead count; the stored exit-wave array has no extra bead axis.
+
+The existing `trajectory_file="single.traj"` argument and old single-file YAML
+configurations remain supported. Thermal correction uses the actual FFT energy
+bins and stable float64 arithmetic, including a unit factor at zero energy.
+
+To run the CPU regression tests in an environment with the project dependencies:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 Good to keep in mind
 ===
 - be mindful of the fence post problem - by convention 

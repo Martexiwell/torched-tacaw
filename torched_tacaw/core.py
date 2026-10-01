@@ -117,8 +117,14 @@ class Config:
         if not provided, last snapshot of trajectory file is used by default.
 
     TRAJECTORY
-    trajectory_file: str
-        (ase).traj file where trajectory is stored
+    trajectory_file: str, optional
+        Single (ase).traj file where a classical or one-bead trajectory is stored.
+        Kept for backwards compatibility; provide either this or trajectory_files.
+    trajectory_files: iterable[str], optional
+        Synchronized (ase).traj files for a multi-bead PIMD/TRPMD trajectory.
+        Complex multislice exit waves are averaged over these files before the
+        temporal window and FFT are applied. All files must have equal lengths
+        and identical atom ordering.
     trajectory_timestep_fs: float
         timestep between snapshots in trajectory
     trajectory_chunks_size: int
@@ -361,13 +367,41 @@ class Config:
                 sample["structure_file"] = kwargs.pop("sample_structure_file")
 
 
+            trajectory_file = kwargs.pop("trajectory_file", None)
+            trajectory_files = kwargs.pop("trajectory_files", None)
+            if trajectory_files is None:
+                if trajectory_file is None:
+                    raise ValueError(
+                        "Either trajectory_file or trajectory_files must be provided"
+                    )
+                trajectory_files = [trajectory_file]
+            elif isinstance(trajectory_files, (str, os.PathLike)):
+                trajectory_files = [trajectory_files]
+            else:
+                trajectory_files = list(trajectory_files)
+
+            if not trajectory_files:
+                raise ValueError("trajectory_files must contain at least one path")
+
+            trajectory_files = [os.fspath(path) for path in trajectory_files]
+            if trajectory_file is not None:
+                trajectory_file = os.fspath(trajectory_file)
+                if trajectory_file != trajectory_files[0]:
+                    raise ValueError(
+                        "When both trajectory_file and trajectory_files are provided, "
+                        "trajectory_file must equal trajectory_files[0]"
+                    )
+
             trajectory = {
-                "file": kwargs.pop("trajectory_file"),
+                # Retain the singular key so old consumers and configs continue to work.
+                "file": trajectory_files[0],
+                "files": trajectory_files,
+                "nof_beads": len(trajectory_files),
                 "timestep_fs": kwargs.pop("trajectory_timestep_fs"),
                 "chunks": {
                     "size": kwargs.pop("trajectory_chunks_size"),
                     "skip_init": kwargs.pop("trajectory_chunks_skip_init"),
-                    "step": kwargs.pop("trajectory_chunks_step", 1), # currently is not doing anything  =(
+                    "step": kwargs.pop("trajectory_chunks_step", 1),
                     "nof": kwargs.pop("trajectory_chunks_nof", None),
                     "overlap": kwargs.pop("trajectory_chunks_overlap", 2.),
                 }
@@ -432,19 +466,40 @@ class Config:
                 trajectory_file_kwargs = {}
 
             self.logger.info('  probing trajectory')
-            try: # try to open the trajectory
-                trajectory_reader = io.TrajctoryReader(trajectory["file"], trajectory_file_type, **trajectory_file_kwargs )
-                trajectory_len = len(trajectory_reader)
-                del trajectory_reader
-            except FileNotFoundError: # if it does not exist, one can overwrite
-                # this by setting trajectory_len parameter, useful when generating
-                # config on machine without the actual trajectory file present
-                trajectory_len:int = kwargs.pop('trajectory_len', None)
-                logging.warning('trajectory file was not found...')
-                if trajectory_len is None:
-                    raise Exception(f'trajectory file {trajectory["file"]} was not found '
-                                    f'and trajectory_len was not provided')
-                logging.warning(f'... but trajectory_len={trajectory_len} was provided and used')
+            provided_trajectory_len = kwargs.pop('trajectory_len', None)
+            trajectory_lengths = []
+            for bead_id, trajectory_path in enumerate(trajectory["files"]):
+                try:
+                    trajectory_reader = io.TrajctoryReader(
+                        trajectory_path,
+                        trajectory_file_type,
+                        **trajectory_file_kwargs,
+                    )
+                    trajectory_lengths.append(len(trajectory_reader))
+                    del trajectory_reader
+                except FileNotFoundError:
+                    if provided_trajectory_len is None:
+                        raise FileNotFoundError(
+                            f"trajectory file for bead {bead_id} was not found: "
+                            f"{trajectory_path}; trajectory_len was not provided"
+                        )
+                    self.logger.warning(
+                        f"trajectory file for bead {bead_id} was not found: "
+                        f"{trajectory_path}; using trajectory_len="
+                        f"{provided_trajectory_len}"
+                    )
+                    trajectory_lengths.append(provided_trajectory_len)
+
+            if len(set(trajectory_lengths)) != 1:
+                lengths_by_bead = ", ".join(
+                    f"bead {bead_id}: {length}"
+                    for bead_id, length in enumerate(trajectory_lengths)
+                )
+                raise ValueError(
+                    "All bead trajectories must have the same number of frames; "
+                    f"got {lengths_by_bead}"
+                )
+            trajectory_len = trajectory_lengths[0]
 
             trajectory['chunks']['starts'] = \
                 [start for start in range(trajectory['chunks']['skip_init'],
@@ -454,7 +509,7 @@ class Config:
                  ]
             if trajectory['chunks']['nof'] is not None:
                 trajectory['chunks']['starts'] = trajectory['chunks']['starts'][0:trajectory['chunks']['nof']]
-            del trajectory_len
+            del trajectory_len, trajectory_lengths
 
             trajectory['chunks']['nof'] = len(trajectory['chunks']['starts'])
 
@@ -1495,49 +1550,61 @@ class Calculator:
 
 
     def load_trajectory(self):
-        """Loads trajectory from trajectory file into self.trajectory
-        as a subscriptable object returning atoms when accessed by index.
+        """Load synchronized single- or multi-bead trajectories.
 
-        If file format is not provided, it will guess the file format from the file extension
+        self.trajectories always contains one reader per bead. The legacy
+        self.trajectory attribute aliases the first reader for compatibility.
+        If the file format is not provided, it is guessed from the extension.
 
         Examples
         --------
-        self.trajectory[0] -> ase.Atoms
+        self.trajectories[bead_id][0] -> ase.Atoms
         """
-        # trajectory_file = self.config['trajectory', 'file']
-        #
-        # if 'file_type' in self.config['trajectory']:
-        #     trajectory_file_type = self.config['trajectory']['file_type']
-        # else:
-        #     # guess file_type based on the file extension
-        #     # trajectory_file_type = 'traj'
-        #     trajectory_file_type = os.path.splitext(trajectory_file)[-1]
-        #
-        # if 'file_kwargs' in self.config['trajectory']:
-        #     trajectory_file_kwargs = self.config['trajectory']['kwargs']
-        # else:
-        #     trajectory_file_kwargs = {}
-        #
-        #
-        # if trajectory_file_type in ['traj', '.traj', 'ase']: # ASE .traj file
-        #     self.trajectory = Trajectory(trajectory_file)
-        #
-        # elif trajectory_file_type in ['lammps', '.lammps']:
-        #     self.trajectory = io.LammpsTrajectoryReader(trajectory_file, **trajectory_file_kwargs)
+        trajectory_config = self.config['trajectory']
+        trajectory_files = trajectory_config.get('files')
+        if trajectory_files is None:
+            trajectory_files = [trajectory_config['file']]
+        trajectory_file_type = trajectory_config.get('file_type', None)
+        trajectory_file_kwargs = trajectory_config.get('file_kwargs', {})
 
-        trajectory_file = self.config['trajectory', 'file']
+        self.trajectories = [
+            io.TrajctoryReader(
+                trajectory_file,
+                trajectory_file_type,
+                **trajectory_file_kwargs,
+            )
+            for trajectory_file in trajectory_files
+        ]
 
-        if 'file_type' in self.config['trajectory']:
-            trajectory_file_type = self.config['trajectory']['file_type']
-        else:
-            trajectory_file_type = None
+        trajectory_lengths = [len(trajectory) for trajectory in self.trajectories]
+        if len(set(trajectory_lengths)) != 1:
+            raise ValueError(
+                "All bead trajectories must have the same number of frames; "
+                f"got {trajectory_lengths}"
+            )
 
-        if 'file_kwargs' in self.config['trajectory']:
-            trajectory_file_kwargs = self.config['trajectory']['kwargs']
-        else:
-            trajectory_file_kwargs = {}
+        reference_atoms = self.trajectories[0][0]
+        reference_numbers = reference_atoms.get_atomic_numbers()
+        reference_cell = reference_atoms.cell.array
+        for bead_id, trajectory in enumerate(self.trajectories[1:], start=1):
+            bead_atoms = trajectory[0]
+            if not np.array_equal(bead_atoms.get_atomic_numbers(), reference_numbers):
+                raise ValueError(
+                    "All bead trajectories must have identical atom ordering; "
+                    f"bead {bead_id} differs from bead 0"
+                )
+            if not np.allclose(bead_atoms.cell.array, reference_cell):
+                raise ValueError(
+                    "All bead trajectories must use the same simulation cell; "
+                    f"bead {bead_id} differs from bead 0"
+                )
 
-        self.trajectory = io.TrajctoryReader(trajectory_file, trajectory_file_type, **trajectory_file_kwargs)
+        self.trajectory = self.trajectories[0]
+        self.nof_beads = len(self.trajectories)
+        self.simplelog(
+            f"loaded {self.nof_beads} synchronized trajectory bead(s), "
+            f"each with {trajectory_lengths[0]} frames"
+        )
 
 
     def allocate_final_wavefunctions(self):
@@ -1562,36 +1629,21 @@ class Calculator:
 
 
     def perform_multislice(self):
-        # logger = self.logger.getChild('multislice') if self.logger is not None else None
-        # if logger is not None:
-        #     logger.info('preparing to perform multislice...')
-        self.logger.info('preparing to perform multislice...')
-
+        logger = self.logger
+        if logger is not None:
+            logger.info('preparing to perform multislice...')
 
         # --------- Initialize crystal structure ---------- #
 
-        base_structure = self.trajectory[0]
+        base_structure = self.trajectories[0][0]
         center_atoms_in_cell = self.config['simulation','center_atoms_in_cell']
 
         natoms = len(base_structure)
-        # atomlist = np.concatenate(
-        #     [base_structure.cell.scaled_positions(base_structure.positions),
-        #      base_structure.numbers.reshape(natoms, 1)],
-        #     axis=1
-        # )
-
-        # crystal = pyms.structure(
-        #     atoms.cell.diagonal(),
-        #     atomlist,
-        #     np.zeros(natoms),
-        #     np.ones(natoms)
-        # )
 
         # center atoms in the cell
         if center_atoms_in_cell:
-            # if logger is not None:
-            #     logger.info('centering atoms in cell ...')
-            self.logger.info('centering atoms in cell ...')
+            if logger is not None:
+                logger.info('centering atoms in cell ...')
             base_structure_centered = base_structure.copy()
             base_structure_centered.center()
             shift_vector = (base_structure_centered.get_center_of_mass()
@@ -1601,83 +1653,102 @@ class Calculator:
 
         chunk_start = self.config['trajectory', 'chunks', 'starts', self.batch_params['trajectory_chunk_id']]
 
-        # del atomlist
-
-
         # --------- perform multislice for every snapshot in chunk ---------- #
 
         subslices = np.linspace(1.0 / self.config['simulation','n_slices'], 1.0, self.config['simulation','n_slices'])
-        self.logger.debug(f'subslices: {subslices}')
+        self.simplelog_debug(f'subslices: {subslices}')
 
-
-        self.logger.info('performing multislice on each snapshot in chunk...')
+        nof_beads = len(self.trajectories)
+        if logger is not None:
+            logger.info(
+                f'performing multislice on each snapshot in chunk for '
+                f'{nof_beads} bead(s)...'
+            )
         for i in range(self.config['trajectory', 'chunks', 'size']):
             snapshot_index = chunk_start+i*self.config['trajectory','chunks','step']
-            self.logger.info(f'├─ begining multislice of snapshot {i} ({snapshot_index} in .trj)')
-            atoms = self.trajectory[snapshot_index]
+            if logger is not None:
+                logger.info(f'├─ begining multislice of snapshot {i} ({snapshot_index} in .trj)')
+            bead_average_wave = None
 
-            if center_atoms_in_cell:
-                atoms.translate(shift_vector)
-                self.logger.debug('│   ├─ atoms shifted to center')
+            for bead_id, trajectory in enumerate(self.trajectories):
+                if logger is not None:
+                    logger.debug(f'│   ├─ bead {bead_id + 1}/{nof_beads}')
+                atoms = trajectory[snapshot_index]
 
-            atomlist = np.concatenate(
-                [atoms.cell.scaled_positions(atoms.positions),
-                 atoms.numbers.reshape(natoms, 1)],
-                axis=1
+                if len(atoms) != natoms:
+                    raise ValueError(
+                        f"Atom count changed in bead {bead_id}, frame "
+                        f"{snapshot_index}: expected {natoms}, got {len(atoms)}"
+                    )
+
+                if center_atoms_in_cell:
+                    atoms.translate(shift_vector)
+                    self.simplelog_debug('│   ├─ atoms shifted to center')
+
+                atomlist = np.concatenate(
+                    [atoms.cell.scaled_positions(atoms.positions),
+                     atoms.numbers.reshape(natoms, 1)],
+                    axis=1
+                )
+                crystal = pyms.structure(
+                    atoms.cell.diagonal(),
+                    atomlist,
+                    np.zeros(natoms),
+                    np.ones(natoms)
+                )
+
+                # Every bead has its own instantaneous transmission functions.
+                P, T = pyms.multislice_precursor(
+                    crystal,
+                    self.config['simulation', 'kspace', 'shape_full'],
+                    self.config['beam','energy_keV'] * 1e3,
+                    subslices=subslices,
+                    nT=1,
+                    device=self.device,
+                    showProgress=False,
+                    displacements=False,
+                    fractional_occupancy=False,
+                    band_width_limiting=self.config['simulation', 'kspace', 'bandwidth_limiting']
+                )
+
+                if logger is not None:
+                    logger.debug(f'│   ├─ bead {bead_id}: ms precursor finished')
+
+                fin_wave_temporary = pyms.multislice(
+                    self.init_waves_flat,
+                    self.config['simulation','n_slices'],
+                    P, T,
+                    device_type=self.device,
+                    return_numpy=False,
+                    qspace_in=True,
+                    qspace_out=True,
+                    subslicing=True
+                )
+                fin_wave_temporary = torch.fft.fftshift(
+                    fin_wave_temporary,
+                    dim=(-2, -1),
+                )
+                fin_wave_temporary = self.config.crop_arr_qspace_2ROI(
+                    fin_wave_temporary,
+                    'bwl',
+                )
+
+                if bead_average_wave is None:
+                    bead_average_wave = fin_wave_temporary
+                else:
+                    bead_average_wave.add_(fin_wave_temporary)
+
+                del atoms, atomlist, crystal, P, T, fin_wave_temporary
+
+            # Coherent TRPMD estimator: average complex exit waves before the
+            # temporal window, FFT, and modulus squared. Scan axes are retained,
+            # so this works for both focused STEM probes and plane waves.
+            bead_average_wave.div_(nof_beads)
+            self.final_wavefunctions[0,i, :, :, :] = bead_average_wave
+            self.simplelog_debug(
+                f'│   └─ averaged {nof_beads} bead wave(s) in shape '
+                f'{bead_average_wave.shape}'
             )
-            crystal = pyms.structure(
-                atoms.cell.diagonal(),
-                atomlist,
-                np.zeros(natoms),
-                np.ones(natoms)
-            )
-
-            # multislice precursors: transmission fctns & propagator
-            P, T = pyms.multislice_precursor(
-                crystal,
-                self.config['simulation', 'kspace', 'shape_full'],
-                self.config['beam','energy_keV'] * 1e3,
-                # subslices   = self.config['simulation','subslices'],
-                subslices   = subslices ,
-                nT          = 1,
-                device      = self.device,
-                showProgress=False,
-                displacements=False,
-                fractional_occupancy=False,
-                band_width_limiting=self.config['simulation', 'kspace', 'bandwidth_limiting']
-            )
-
-            self.logger.debug(f'│   ├─ ms precursor finished')
-
-            fin_wave_temporary = pyms.multislice(
-                self.init_waves_flat,
-                self.config['simulation','n_slices'],
-                P, T,
-                device_type=self.device,
-                return_numpy=False,
-                qspace_in=True,
-                qspace_out=True,
-                subslicing=True
-            )
-            fin_wave_temporary = torch.fft.fftshift(fin_wave_temporary, dim = (-2, -1))
-
-            self.logger.debug(f'│   ├─ multislice finished --> cutting kspace and reshaping...')
-
-            # TODO: add "crop_mode" to config in format "qe" | None
-            # slice out ROI in kspace
-            # currently this ROI is in the center of kspace implicitly
-            _, shape_tot_x, shape_tot_y = fin_wave_temporary.shape
-            _, _, _, shape_ROI_x, shape_ROI_y = self.final_wavefunctions.shape
-            fin_wave_temporary = self.config.crop_arr_qspace_2ROI(fin_wave_temporary, 'bwl')
-            # fin_wave_temporary = fin_wave_temporary[
-            #                       :,
-            #                       (shape_tot_x - shape_ROI_x) // 2:(shape_tot_x + shape_ROI_x) // 2,
-            #                       (shape_tot_y - shape_ROI_y) // 2:(shape_tot_y + shape_ROI_y) // 2,
-            #                      ]
-
-            self.logger.debug( f'│   └─ part of shape {fin_wave_temporary.shape} was cropped')
-
-            self.final_wavefunctions[0,i, :, :, :] = fin_wave_temporary
 
             # # DEBUG - dump final wavefunctions to disk
             # debugfile = self.config['datafolder'] + f'debug/snapshot_fin_wavefun_{self.batch_id}_{i}.npy'
@@ -1685,11 +1756,9 @@ class Calculator:
             # np.save(debugfile, fin_wave_temporary.cpu())
             # self.simplelog(f'{debugfile} saved')
 
-            del atoms, atomlist, crystal, P, T, fin_wave_temporary
+            del bead_average_wave
 
-
-
-        del chunk_start, base_structure, natoms, subslices
+        del chunk_start, base_structure, natoms, subslices, nof_beads
         if center_atoms_in_cell:
             del shift_vector
 
@@ -1771,35 +1840,32 @@ class Calculator:
             logger.info(f'  totprob beam (<1): {torch.sum(self.intensity_freq) / (self.config["beam","scanning","batch_shape",0] * self.config["beam","scanning","batch_shape",1])}')
 
 
-        # multiply by prefactor
-        # TODO: change this to use config.get_energy_axis_ROI
-        full_energy_axis_THz = torch.linspace(
-            *self.config['simulation','frequency_THz', 'full'],
-            self.config['trajectory','chunks','size'],
-            device=self.device
+        # Use the actual shifted FFT bins, including the exact zero bin. An
+        # endpoint-inclusive linspace shifts the correction relative to the FFT.
+        energy_meV = torch.as_tensor(
+            self.config.get_energy_axis_meV(ROI=True),
+            dtype=torch.float64,
+            device=self.device,
         )
-        ROI_energy_axis_THz = full_energy_axis_THz[self.config['simulation','frequency_THz', 'ROI_indices',0]:self.config['simulation','frequency_THz', 'ROI_indices',1]]
-        del full_energy_axis_THz
-        ROI_energy_axis_meV = units.convert_THz2meV(ROI_energy_axis_THz)
-        del ROI_energy_axis_THz
+        betaE = energy_meV * c.milli * c.eV / (
+            c.Boltzmann * self.config['sample', 'temperature_K']
+        )
 
-
-        # boltzmann_term = np.exp( - energy_axis_meV * c.milli * c.eV  / ( c.Boltzmann * temperature_K ) )
-        betaE = ROI_energy_axis_meV * c.milli * c.eV / (c.Boltzmann * self.config['sample', 'temperature_K'])
-
-        # prefactor = betaE / (1 - torch.exp(-betaE))
-        def calculate_prefactor(x):
-            # Use a small threshold to check for values close to zero
-            # if not problem with divergence around zero
-            eps = 1e-6
-            near_zero = torch.abs(x) < eps
-            regular = x / (1 - torch.exp(-x))
-            return torch.where(
-                near_zero,
-                torch.tensor(1.0, dtype=x.dtype, device=x.device),
-                regular
-            )
-        prefactor = calculate_prefactor(betaE)
+        # Kubo factor x / (1 - exp(-x)). Keep the entire calculation in float64:
+        # float32 exp(-x) overflows below about -76.4 meV at 10 K, falsely
+        # zeroing the energy-gain tail even when the output array is float64.
+        # expm1 avoids cancellation near zero; use only nonpositive exponential
+        # arguments to avoid overflow on the negative-energy branch altogether.
+        magnitude = torch.abs(betaE)
+        at_zero = magnitude == 0
+        denominator = torch.where(
+            at_zero, torch.ones_like(magnitude), -torch.expm1(-magnitude)
+        )
+        prefactor = magnitude / denominator
+        prefactor = torch.where(
+            betaE < 0, prefactor * torch.exp(-magnitude), prefactor
+        )
+        prefactor = torch.where(at_zero, torch.ones_like(prefactor), prefactor)
 
         self.tacaw = torch.einsum('e,de...->de...', prefactor, self.intensity_freq)
         del self.intensity_freq
