@@ -4,7 +4,7 @@
 ┃ ╺┳╸┏━┓┏━┓┏━╸╻ ╻┏━╸╺┳┓   ╺┳╸┏━┓┏━╸┏━┓╻ ╻ ┃
 ┃  ┃ ┃ ┃┣┳┛┃  ┣━┫┣╸  ┃┃╺━╸ ┃ ┣━┫┃  ┣━┫┃╻┃ ┃
 ┃  ╹ ┗━┛╹┗╸┗━╸╹ ╹┗━╸╺┻┛    ╹ ╹ ╹┗━╸╹ ╹┗┻┛ ┃ 
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ v1.1.0 ┛                                       
+┗━━━━━━━━━━━━━━━━━━━━━━ v1.1.0 ━ Habanero ┛                                       
  ``` 
  [![DOI](https://zenodo.org/badge/1061826813.svg)](https://doi.org/10.5281/zenodo.20929266)
  
@@ -82,8 +82,6 @@ How to cite?
 We are very happy you are using torched-TACAW. If you want to reference it, 
 you are most welcome to cite 
 
-**preprint https://arxiv.org/abs/2607.02236** 
+**[Osmera et al., Ultramicroscopy 288, 114461 (2027), doi:10.1016/j.ultramic.2026.114461](https://www.sciencedirect.com/science/article/pii/S0304399126001531)** 
 
 as well as this repo. 
-
-<meta name="google-site-verification" content="gH45tRsjTuH4c83FxUTqqrumt9EaMjbBuxPnt8_8Ryo" />
