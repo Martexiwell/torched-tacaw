@@ -1,60 +1,53 @@
 cff-version: 1.2.0
-message: "Please consider citing as bellow."
-authors:
-- family-names: "Osmera"
-  given-names: "Martin"
-  orcid: "https://orcid.org/0009-0002-4246-0972"
-- family-names: "Rusz"
-  given-names: "Ján"
-  orcid: "https://orcid.org/0000-0002-0074-1349"
+message: "If you use this software, please cite the article below."
+type: software
 title: "torched-TACAW"
-version: 1.0.0
-doi: xxx
-date-released: 2026-06-25
-url: "https://github.com/Martexiwell/torched-tacaw.git"
+authors:
+  - family-names: "Osmera"
+    given-names: "Martin"
+    orcid: "https://orcid.org/0009-0002-4246-0972"
+  - family-names: "Rusz"
+    given-names: "Ján"
+    orcid: "https://orcid.org/0000-0002-0074-1349"
+version: 1.1.0
+doi: 10.5281/zenodo.20929266
+date-released: YYYY-MM-DD          # release date of v1.1.0
+repository-code: "https://github.com/Martexiwell/torched-tacaw"
 
 preferred-citation:
-    type: preprint
-    authors:
+  type: article
+  authors:
     - family-names: "Osmera"
       given-names: "Martin"
       orcid: "https://orcid.org/0009-0002-4246-0972"
     - family-names: "Vaz"
       given-names: "João"
-    #   orcid: "https://orcid.org/0000-0000-0000-0000"
     - family-names: "Zeiger"
       given-names: "Paul M."
       orcid: "https://orcid.org/0000-0002-7018-244X"
     - family-names: "Rusz"
       given-names: "Ján"
       orcid: "https://orcid.org/0000-0002-0074-1349"
-    title: "Efficient large-scale STEM-EELS simulations with torched-TACAW"
-    doi: "10.48550/arXiv.2607.02236"
-    year: 2026
-    eprint: 2607.02236
-    achive: arXiv
+  title: "Efficient large-scale STEM-EELS simulations with torched-TACAW"
+  journal: "Ultramicroscopy"
+  volume: 288
+  start: 114461
+  year: 2027
+  doi: "10.1016/j.ultramic.2026.114461"
 
-# preferred-citation:
-#     type: article
-#     authors:
-#     - family-names: "Osmera"
-#       given-names: "Martin"
-#       orcid: "https://orcid.org/0009-0002-4246-0972"
-#     - family-names: "Vaz"
-#       given-names: "João"
-#     #   orcid: "https://orcid.org/0000-0000-0000-0000"
-#     - family-names: "Zeiger"
-#       given-names: "Paul M."
-#       orcid: "https://orcid.org/0000-0002-7018-244X"
-#     - family-names: "Rusz"
-#       given-names: "Ján"
-#       orcid: "https://orcid.org/0000-0002-0074-1349"
-#     title: "Efficient large-scale STEM-EELS simulations with torched-TACAW"
-#     doi: "10.0000/00000"
-#     journal: "Journal Title"
-#     month: 9
-#     start: 1 # First page number
-#     end: 10 # Last page number
-#     issue: 1
-#     volume: 1
-#     year: 2021
+references:
+  - type: article
+    title: "Efficient large-scale STEM-EELS simulations with torched-TACAW"
+    authors:
+      - family-names: "Osmera"
+        given-names: "Martin"
+      - family-names: "Vaz"
+        given-names: "João"
+      - family-names: "Zeiger"
+        given-names: "Paul M."
+      - family-names: "Rusz"
+        given-names: "Ján"
+    year: 2026
+    doi: "10.48550/arXiv.2607.02236"
+    repository: "https://arxiv.org/abs/2607.02236"
+    notes: "arXiv preprint 2607.02236"
